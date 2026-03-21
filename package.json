@@ -1,22 +1,18 @@
 {
-  "name": "remote-components-monorepo",
+  "name": "nextjs-remote-component-provider",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "dev:spa": "cd react-spa-consumer && pnpm dev"
+    "lint": "next lint"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
-    "@vitejs/plugin-react": "^6.0.1",
-    "next": "^16.0.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "remote-components": "^0.1.2",
-    "vite": "^8.0.1"
+    "next": "15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
