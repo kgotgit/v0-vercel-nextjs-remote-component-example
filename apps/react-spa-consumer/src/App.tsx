@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RemoteComponent } from "remote-components/html";
+import { RemoteComponent } from "remote-components/html/host";
 
 // URL of the Next.js remote provider app
 // In production, replace with your deployed Next.js app URL
