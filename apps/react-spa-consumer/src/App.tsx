@@ -1,5 +1,5 @@
 import { useState } from "react";
-import "remote-components/react";
+import {RemoteComponent} from "remote-components/react";
 import { getRemoteProviderUrl } from "@repo/config";
 import { APP_COPY, getComponentLabel } from "@repo/ui";
 
@@ -55,7 +55,7 @@ function App() {
           </div>
 
           <div className="border border-dashed border-gray-300 rounded-lg p-4 min-h-[200px]">
-            <remote-component
+            <RemoteComponent
               key={activeTab}
               src={`${REMOTE_PROVIDER_URL}/remote-components/${activeTab}`}
             />

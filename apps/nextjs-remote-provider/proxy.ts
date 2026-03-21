@@ -10,6 +10,6 @@ export const proxy = withRemoteComponents(undefined, {
 });
 
 export const config = {
-  matcher: ["/remote-components/:path*"],
+  matcher: ["/remote-components/:path*", "/_next/static/:path*"],
 };
 
