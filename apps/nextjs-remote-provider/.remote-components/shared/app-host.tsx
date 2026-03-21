@@ -1,0 +1,18 @@
+'use client';
+export const shared = { ['react']: () => import('react'),
+['react/jsx-dev-runtime']: () => import('react/jsx-dev-runtime'),
+['react/jsx-runtime']: () => import('react/jsx-runtime'),
+['react-dom']: () => import('react-dom'),
+['react-dom/client']: () => import('react-dom/client'),
+['next/navigation']: () => import('next/navigation'),
+['next/dist/client/components/navigation']: () => import('next/dist/client/components/navigation'),
+['next/link']: () => import('next/link'),
+['next/dist/client/app-dir/link']: () => import('next/dist/client/app-dir/link'),
+['next/form']: () => import('next/form'),
+['next/dist/client/app-dir/form']: () => import('next/dist/client/app-dir/form'),
+['next/image']: () => import('next/image'),
+['next/dist/client/image-component']: () => import('next/dist/client/image-component'),
+['next/dist/api/image']: () => import('next/dist/api/image'),
+['next/script']: () => import('next/script'),
+['next/dist/client/script']: () => import('next/dist/client/script'),
+['next/dist/build/polyfills/process']: () => import('next/dist/build/polyfills/process'),};

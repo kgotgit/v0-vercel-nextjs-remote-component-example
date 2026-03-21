@@ -1,5 +1,5 @@
 import { useState } from "react";
-import "remote-components/html/host";
+import "remote-components/react";
 import { getRemoteProviderUrl } from "@repo/config";
 import { APP_COPY, getComponentLabel } from "@repo/ui";
 
