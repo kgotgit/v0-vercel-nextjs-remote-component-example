@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import { withRemoteComponents } from "remote-components/next/config";
 
 const nextConfig: NextConfig = {
   // Enable CORS for remote component consumption
@@ -17,4 +16,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withRemoteComponents(nextConfig);
+export default nextConfig;
