@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-import { withRemoteComponents } from "remote-components/next";
+import { withRemoteComponents } from "remote-components/next/config";
 
 const nextConfig: NextConfig = {
   // Enable CORS for remote component consumption
