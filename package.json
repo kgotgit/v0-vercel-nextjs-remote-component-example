@@ -2,16 +2,29 @@
   "name": "remote-components-monorepo",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "turbo run dev",
-    "dev:spa": "turbo run dev --filter=react-spa-consumer",
-    "dev:nextjs": "turbo run dev --filter=nextjs-remote-provider",
-    "build": "turbo run build",
-    "lint": "turbo run lint"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "dev:spa": "cd react-spa-consumer && pnpm dev"
+  },
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1",
+    "@vitejs/plugin-react": "^6.0.1",
+    "next": "^16.0.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "remote-components": "^0.1.2",
+    "vite": "^8.0.1"
   },
   "devDependencies": {
-    "turbo": "^2.3.0"
-  },
-  "packageManager": "pnpm@9.0.0"
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.6.3"
+  }
 }

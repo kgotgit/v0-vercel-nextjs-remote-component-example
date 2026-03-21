@@ -4,7 +4,7 @@ import { RemoteComponent } from "remote-components/html/host";
 // URL of the Next.js remote provider app
 // In production, replace with your deployed Next.js app URL
 const REMOTE_PROVIDER_URL =
-  import.meta.env.VITE_REMOTE_PROVIDER_URL || "http://localhost:4000";
+  import.meta.env.VITE_REMOTE_PROVIDER_URL || "http://localhost:3000";
 
 function App() {
   const [activeTab, setActiveTab] = useState<"counter" | "card" | "header">(
@@ -73,17 +73,18 @@ function App() {
         {/* Info Section */}
         <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="font-semibold text-gray-900 mb-2">
-              How it works
-            </h3>
+            <h3 className="font-semibold text-gray-900 mb-2">How it works</h3>
             <ul className="text-sm text-gray-600 space-y-2">
               <li>
                 1. Next.js app exposes components via{" "}
-                <code className="bg-gray-100 px-1 rounded">/remote-components/*</code>
+                <code className="bg-gray-100 px-1 rounded">
+                  /remote-components/*
+                </code>
               </li>
               <li>
                 2. This React SPA uses{" "}
-                <code className="bg-gray-100 px-1 rounded">RemoteComponent</code> to fetch them
+                <code className="bg-gray-100 px-1 rounded">RemoteComponent</code>{" "}
+                to fetch them
               </li>
               <li>3. Components are rendered with full interactivity</li>
               <li>4. Server-side rendering happens on the Next.js app</li>
@@ -91,9 +92,7 @@ function App() {
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="font-semibold text-gray-900 mb-2">
-              Configuration
-            </h3>
+            <h3 className="font-semibold text-gray-900 mb-2">Configuration</h3>
             <div className="text-sm text-gray-600 space-y-2">
               <p>
                 Remote Provider URL:{" "}
@@ -102,7 +101,10 @@ function App() {
                 </code>
               </p>
               <p className="text-xs text-gray-500 mt-2">
-                Set <code className="bg-gray-100 px-1 rounded">VITE_REMOTE_PROVIDER_URL</code>{" "}
+                Set{" "}
+                <code className="bg-gray-100 px-1 rounded">
+                  VITE_REMOTE_PROVIDER_URL
+                </code>{" "}
                 environment variable to change the provider URL in production.
               </p>
             </div>
