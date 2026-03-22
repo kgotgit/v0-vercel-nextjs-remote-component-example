@@ -7,7 +7,12 @@ import { RemoteComponentProvider, useRemoteComponent } from "./components/remote
 const REMOTE_PROVIDER_URL = getRemoteProviderUrl(import.meta.env.VITE_REMOTE_PROVIDER_URL);
 
 function normalizeRemotePath(path: string) {
-  return path.startsWith("/") ? path : `/${path}`;
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  if (normalized.startsWith("/remote-components/")) {
+    const stripped = normalized.slice("/remote-components".length);
+    return stripped.startsWith("/") ? stripped : `/${stripped}`;
+  }
+  return normalized;
 }
 
 function ProductsHostShell() {

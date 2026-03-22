@@ -4,10 +4,6 @@ type Modality = "all" | "ct" | "mri" | "xray";
 
 const MODALITIES: Modality[] = ["all", "ct", "mri", "xray"];
 
-function navigateRemote(path: string) {
-  window.dispatchEvent(new CustomEvent("remote:navigate", { detail: { path } }));
-}
-
 export function ProductsClient({
   modality,
   currentPage,
@@ -17,13 +13,16 @@ export function ProductsClient({
   currentPage: number;
   totalPages: number;
 }) {
+  const toStandaloneHref = (path: string) => `/remote-components${path}`;
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
         {MODALITIES.map((value) => (
-          <button
+          <a
             key={value}
-            onClick={() => navigateRemote(`/products/${value}/page/1`)}
+            href={toStandaloneHref(`/products/${value}/page/1`)}
+            data-remote-path={`/products/${value}/page/1`}
             className={`px-3 py-1.5 rounded-full text-xs border ${
               modality === value
                 ? "bg-gray-900 text-white border-gray-900"
@@ -31,25 +30,31 @@ export function ProductsClient({
             }`}
           >
             {value.toUpperCase()}
-          </button>
+          </a>
         ))}
       </div>
 
       <div className="flex items-center gap-2">
-        <button
-          onClick={() => navigateRemote(`/products/${modality}/page/${Math.max(1, currentPage - 1)}`)}
-          disabled={currentPage <= 1}
-          className="px-3 py-1.5 rounded-md text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        <a
+          href={toStandaloneHref(`/products/${modality}/page/${Math.max(1, currentPage - 1)}`)}
+          data-remote-path={`/products/${modality}/page/${Math.max(1, currentPage - 1)}`}
+          aria-disabled={currentPage <= 1}
+          className={`px-3 py-1.5 rounded-md text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 ${
+            currentPage <= 1 ? "opacity-50 pointer-events-none" : ""
+          }`}
         >
           Previous
-        </button>
-        <button
-          onClick={() => navigateRemote(`/products/${modality}/page/${Math.min(totalPages, currentPage + 1)}`)}
-          disabled={currentPage >= totalPages}
-          className="px-3 py-1.5 rounded-md text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        </a>
+        <a
+          href={toStandaloneHref(`/products/${modality}/page/${Math.min(totalPages, currentPage + 1)}`)}
+          data-remote-path={`/products/${modality}/page/${Math.min(totalPages, currentPage + 1)}`}
+          aria-disabled={currentPage >= totalPages}
+          className={`px-3 py-1.5 rounded-md text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 ${
+            currentPage >= totalPages ? "opacity-50 pointer-events-none" : ""
+          }`}
         >
           Next
-        </button>
+        </a>
       </div>
     </div>
   );

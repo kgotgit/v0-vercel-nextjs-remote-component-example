@@ -18,12 +18,26 @@ type RemoteComponentContextValue = {
 
 const RemoteComponentContext = createContext<RemoteComponentContextValue | null>(null);
 
+function normalizeHostPath(path: string) {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  if (normalized === "/") {
+    return "/products/all/page/1";
+  }
+
+  if (normalized.startsWith("/remote-components/")) {
+    const stripped = normalized.slice("/remote-components".length);
+    return stripped.startsWith("/") ? stripped : `/${stripped}`;
+  }
+
+  return normalized;
+}
+
 function getUrlPathWithSearch() {
   if (typeof window === "undefined") {
     return "/products/all/page/1";
   }
-  const path = `${window.location.pathname}${window.location.search}`;
-  return path === "/" ? "/products/all/page/1" : path;
+  const path = normalizeHostPath(window.location.pathname);
+  return `${path}${window.location.search}`;
 }
 
 export function RemoteComponentProvider({ children }: { children: ReactNode }) {
@@ -32,7 +46,7 @@ export function RemoteComponentProvider({ children }: { children: ReactNode }) {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const navigateRemote = useCallback((path: string) => {
-    const normalized = path.startsWith("/") ? path : `/${path}`;
+    const normalized = normalizeHostPath(path);
     setIsLoading(true);
     window.history.pushState(null, "", normalized);
     setRemotePath(normalized);
@@ -44,20 +58,35 @@ export function RemoteComponentProvider({ children }: { children: ReactNode }) {
       setRemotePath(getUrlPathWithSearch());
     };
 
-    const onRemoteNavigate = (event: Event) => {
-      const detail = (event as CustomEvent<{ path?: string }>).detail;
-      if (!detail?.path) {
+    const onDocumentClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
         return;
       }
-      navigateRemote(detail.path);
+      const anchor = target.closest("a[data-remote-path]") as HTMLAnchorElement | null;
+      if (!anchor) {
+        return;
+      }
+
+      if (anchor.target && anchor.target !== "_self") {
+        return;
+      }
+
+      const remotePath = anchor.getAttribute("data-remote-path");
+      if (!remotePath) {
+        return;
+      }
+
+      event.preventDefault();
+      navigateRemote(remotePath);
     };
 
     window.addEventListener("popstate", onPopState);
-    window.addEventListener("remote:navigate", onRemoteNavigate as EventListener);
+    document.addEventListener("click", onDocumentClick);
 
     return () => {
       window.removeEventListener("popstate", onPopState);
-      window.removeEventListener("remote:navigate", onRemoteNavigate as EventListener);
+      document.removeEventListener("click", onDocumentClick);
     };
   }, [navigateRemote]);
 
