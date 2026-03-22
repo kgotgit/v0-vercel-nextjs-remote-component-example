@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useCounterStore } from "@repo/shared-store";
 
 export function CounterClient() {
-  const [count, setCount] = useState(0);
+  const { count, increment, decrement, reset, setCount } = useCounterStore();
 
   return (
     <>
       <div className="flex items-center gap-4">
         <button
-          onClick={() => setCount((c) => c - 1)}
+          onClick={decrement}
           className="w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium text-lg shadow-sm transition-colors"
         >
           -
@@ -18,7 +18,7 @@ export function CounterClient() {
           <span className="text-3xl font-bold text-indigo-600">{count}</span>
         </div>
         <button
-          onClick={() => setCount((c) => c + 1)}
+          onClick={increment}
           className="w-10 h-10 flex items-center justify-center rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-medium text-lg shadow-sm transition-colors"
         >
           +
@@ -27,7 +27,7 @@ export function CounterClient() {
 
       <div className="mt-6 flex gap-2">
         <button
-          onClick={() => setCount(0)}
+          onClick={reset}
           className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors"
         >
           Reset

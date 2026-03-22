@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@repo/config": "workspace:*",
+    "@repo/shared-store": "workspace:*",
     "@repo/ui": "workspace:*",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

@@ -25,6 +25,10 @@ export const PROVIDER_COMPONENTS = [
   {
     id: "header",
     description: "Shared header with navigation links"
+  },
+  {
+    id: "catalog",
+    description: "Path-based pagination and modality filtering demo with ISR"
   }
 ];
 

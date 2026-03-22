@@ -85,3 +85,70 @@ export function CounterClient() {
 
 - `counter.server.tsx` + `counter.client.tsx`
 - `header.server.tsx` + `header.client.tsx`
+
+---
+
+# Shared Modules
+
+Shared packages are declared as singletons so both the SPA host and the Next.js remote use the **same runtime instance** — enabling cross-app state sharing.
+
+## Packages
+
+| Package | Purpose |
+|---|---|
+| `@repo/shared-store` | Zustand stores shared across host + remotes |
+| `@repo/config` | URLs and app metadata |
+| `@repo/ui` | Shared copy and component labels |
+
+## SPA host (`vite.config.ts`)
+
+Configure `@originjs/vite-plugin-federation` with `shared` singletons:
+
+```ts
+federation({
+  name: "spa-host",
+  shared: {
+    react: { singleton: true, eager: true },
+    "react-dom": { singleton: true, eager: true },
+    zustand: { singleton: true, eager: true },
+    "@repo/shared-store": { singleton: true, eager: true },
+  },
+})
+```
+
+## Next.js provider (`next.config.ts`)
+
+Pass `shared` to `withRemoteComponents` — `react` and `react-dom` are always included by default:
+
+```ts
+withRemoteComponents({}, {
+  shared: ["zustand", "@repo/shared-store"],
+})
+```
+
+## Using stores in remote components
+
+Client components import from `@repo/shared-store` instead of local `useState`:
+
+```tsx
+"use client";
+import { useCounterStore } from "@repo/shared-store";
+
+export function CounterClient() {
+  const { count, increment, decrement } = useCounterStore();
+  // ...
+}
+```
+
+## Using stores in the SPA host
+
+The host reads the same store — any update from the remote or the host is reflected everywhere:
+
+```tsx
+import { useCounterStore } from "@repo/shared-store";
+
+function App() {
+  const { count } = useCounterStore();
+  // count stays in sync with the remote counter component
+}
+```
