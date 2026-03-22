@@ -19,6 +19,10 @@ export const PROVIDER_COMPONENTS = [
     description: "Interactive counter with increment/decrement buttons"
   },
   {
+    id: "products",
+    description: "Dynamic RSC products list with path-based modality/page routing"
+  },
+  {
     id: "card",
     description: "Reusable card component with title and content"
   },

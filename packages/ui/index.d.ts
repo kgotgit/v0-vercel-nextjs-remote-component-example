@@ -12,7 +12,7 @@ export declare const PROVIDER_COPY: {
 };
 
 export declare const PROVIDER_COMPONENTS: Array<{
-  id: "counter" | "card" | "header" | "catalog";
+  id: "counter" | "products" | "card" | "header" | "catalog";
   description: string;
 }>;
 
