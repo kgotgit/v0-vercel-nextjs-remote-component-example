@@ -32,7 +32,6 @@ import {
  * - Tags assigned via cacheTag() in cached functions
  */
 export default function CacheDemoPage() {
-  console.log('[v0] CacheDemoPage rendering')
   return (
     <div className="space-y-8">
       {/* Explanation Section */}
@@ -119,7 +118,7 @@ export default function CacheDemoPage() {
             <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto">
               <code>{`"use cache"
 
-import { unstable_cacheTag as cacheTag } from 'next/cache'
+import { cacheTag } from 'next/cache'
 
 export async function getProducts() {
   cacheTag('products')  // Tag for invalidation
@@ -152,20 +151,18 @@ export async function revalidateProducts() {
             <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto">
               <code>{`// next.config.ts
 const nextConfig = {
+  // cacheComponents enables both "use cache" and PPR
   cacheComponents: true,
-  experimental: { ppr: true },
 }
 
-// page.tsx
-"use cache"
-
+// page.tsx - Static shell with dynamic streaming
 export default function Page() {
   return (
     <div>
-      {/* Cached shell loads instantly */}
+      {/* Static shell loads instantly */}
       <Header />
       
-      {/* Dynamic content streams in */}
+      {/* Async content wrapped in Suspense streams in */}
       <Suspense fallback={<Loading />}>
         <DynamicContent />
       </Suspense>

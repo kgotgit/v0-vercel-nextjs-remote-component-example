@@ -1,19 +1,17 @@
+import { Suspense } from "react";
 import { RemoteComponent } from "remote-components/next";
 import { CatalogServer } from "./catalog.server";
 
-// Note: revalidate route segment config is not compatible with cacheComponents.
-// Use "use cache" + cacheTag() for caching instead.
+// With cacheComponents enabled, all uncached async data access must be inside Suspense.
+// This page uses "use cache" to make the entire page cacheable.
 
 type CatalogPageParams = {
   page: string;
   filterSlug: string;
 };
 
-export default async function CatalogRemotePage({
-  params,
-}: {
-  params: Promise<CatalogPageParams>;
-}) {
+async function CatalogContent({ params }: { params: Promise<CatalogPageParams> }) {
+  "use cache"
   const resolvedParams = await params;
   const parsedPage = Number.parseInt(resolvedParams.page, 10);
   const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
@@ -22,5 +20,17 @@ export default async function CatalogRemotePage({
     <RemoteComponent>
       <CatalogServer page={page} filterSlug={resolvedParams.filterSlug} />
     </RemoteComponent>
+  );
+}
+
+export default function CatalogRemotePage({
+  params,
+}: {
+  params: Promise<CatalogPageParams>;
+}) {
+  return (
+    <Suspense fallback={<div className="p-5 text-gray-500">Loading catalog...</div>}>
+      <CatalogContent params={params} />
+    </Suspense>
   );
 }

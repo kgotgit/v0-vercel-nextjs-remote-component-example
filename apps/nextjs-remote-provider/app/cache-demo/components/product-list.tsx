@@ -10,9 +10,7 @@ import { getProducts } from '@/lib/products'
  * - Multiple components can share the same cached data
  */
 export async function ProductList() {
-  console.log('[v0] ProductList component rendering')
   const products = await getProducts()
-  console.log('[v0] ProductList received products:', products.length)
   
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

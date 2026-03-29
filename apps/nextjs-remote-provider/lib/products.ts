@@ -1,4 +1,4 @@
-import { unstable_cacheTag as cacheTag } from 'next/cache'
+import { cacheTag } from 'next/cache'
 
 // Simulated product data - in production this would be a database or API call
 const PRODUCTS_DB = [
@@ -21,12 +21,9 @@ export async function getProducts(): Promise<Product[]> {
   "use cache"
   cacheTag('products')
   
-  console.log('[v0] getProducts called')
-  
   // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 500))
   
-  console.log('[v0] getProducts returning', PRODUCTS_DB.length, 'products')
   return PRODUCTS_DB
 }
 
@@ -41,7 +38,7 @@ export async function getProduct(id: string): Promise<Product | undefined> {
   // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 300))
   
-  console.log(`[Cache] Fetching product ${id} from database...`)
+
   return PRODUCTS_DB.find(p => p.id === id)
 }
 
@@ -56,7 +53,7 @@ export async function getProductsByCategory(category: string): Promise<Product[]
   // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 400))
   
-  console.log(`[Cache] Fetching products for category: ${category}...`)
+
   return PRODUCTS_DB.filter(p => p.category === category)
 }
 
@@ -71,7 +68,7 @@ export async function getProductStats() {
   // Simulate expensive computation
   await new Promise(resolve => setTimeout(resolve, 800))
   
-  console.log('[Cache] Computing product statistics...')
+
   
   const totalProducts = PRODUCTS_DB.length
   const totalStock = PRODUCTS_DB.reduce((sum, p) => sum + p.stock, 0)
