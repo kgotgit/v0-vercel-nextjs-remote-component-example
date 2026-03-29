@@ -36,7 +36,7 @@ export default function CacheDemoLayout({
       <footer className="border-t border-gray-200 bg-white mt-12">
         <div className="max-w-6xl mx-auto px-6 py-4">
           <p className="text-xs text-gray-500">
-            Layout rendered at: {new Date().toISOString()} (cached)
+            Next.js 16 Cache Components Demo
           </p>
         </div>
       </footer>
