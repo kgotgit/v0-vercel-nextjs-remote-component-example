@@ -2,13 +2,9 @@ import type { NextConfig } from "next";
 import { withRemoteComponents } from 'remote-components/next/config';
 
 const nextConfig: NextConfig = withRemoteComponents({
-  // Enable Cache Components (use cache directive)
+  // Enable Cache Components (includes PPR - Partial Prerendering)
+  // The "use cache" directive and PPR are both enabled via this single flag
   cacheComponents: true,
-  
-  // Enable Partial Prerendering (PPR)
-  experimental: {
-    ppr: true,
-  },
 });
 
 export default nextConfig;
