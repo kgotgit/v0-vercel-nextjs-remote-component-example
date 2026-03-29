@@ -1,4 +1,5 @@
 import { getProducts } from '@/lib/products'
+import { RenderedAt } from './rendered-at'
 
 /**
  * ProductList - Server Component that displays products
@@ -36,7 +37,7 @@ export async function ProductList() {
       </div>
       <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
         <p className="text-xs text-gray-500">
-          Rendered at: {new Date().toISOString()}
+          Rendered at: <RenderedAt />
         </p>
       </div>
     </div>
