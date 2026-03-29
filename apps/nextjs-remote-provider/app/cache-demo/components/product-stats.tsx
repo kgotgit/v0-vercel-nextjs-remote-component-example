@@ -1,13 +1,11 @@
-"use cache"
-
 import { getProductStats } from '@/lib/products'
 
 /**
- * ProductStats - A Cache Component with separate cache tag
+ * ProductStats - Server Component that displays product statistics
  * 
- * This component is cached independently from ProductList.
- * It has its own cache tag (products-stats), allowing granular invalidation.
- * You can invalidate just the stats without affecting the product list cache.
+ * The data fetching (getProductStats) is cached via "use cache" + cacheTag()
+ * in lib/products.ts with tag 'products-stats'.
+ * This allows granular invalidation separate from the product list.
  */
 export async function ProductStats() {
   const stats = await getProductStats()

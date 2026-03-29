@@ -1,5 +1,3 @@
-"use cache"
-
 import { Suspense } from 'react'
 import { ProductList } from './components/product-list'
 import { ProductStats } from './components/product-stats'
@@ -16,21 +14,25 @@ import {
 /**
  * Cache Demo Page - Demonstrating PPR and Cache Components
  * 
- * This page uses "use cache" at the top, making the entire page cacheable.
- * However, components wrapped in <Suspense> that access request-time data
- * (like headers) will be streamed in dynamically via PPR.
+ * This page demonstrates Next.js 16's caching features:
  * 
- * CACHE FLOW:
- * 1. Page shell (layout + static parts) served instantly from cache
- * 2. Cached components (ProductList, ProductStats) served from their cache
- * 3. Dynamic component (DynamicUserInfo) streams in at request time
+ * CACHE COMPONENTS ("use cache" directive):
+ * - Individual components like ProductList, ProductStats have "use cache" 
+ * - Data fetching functions in lib/products.ts have "use cache" with cacheTag()
+ * - Each cached unit has its own independent cache entry
  * 
- * INVALIDATION FLOW:
- * 1. Server Actions call revalidateTag('tag-name', 'max')
- * 2. Next.js marks the cache entry as stale
- * 3. On next request, fresh data is fetched and cached
+ * PPR (Partial Prerendering):
+ * - The page shell renders immediately
+ * - Async components wrapped in <Suspense> stream in as they resolve
+ * - DynamicUserInfo accesses headers() so it renders at request time
+ * 
+ * CACHE INVALIDATION:
+ * - Use revalidateTag('tag-name', 'max') in Server Actions
+ * - 'max' is a cacheLife profile that enables SWR behavior
+ * - Tags assigned via cacheTag() in cached functions
  */
 export default function CacheDemoPage() {
+  console.log('[v0] CacheDemoPage rendering')
   return (
     <div className="space-y-8">
       {/* Explanation Section */}

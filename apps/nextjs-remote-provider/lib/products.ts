@@ -1,5 +1,3 @@
-"use cache"
-
 import { unstable_cacheTag as cacheTag } from 'next/cache'
 
 // Simulated product data - in production this would be a database or API call
@@ -16,15 +14,19 @@ export type Product = typeof PRODUCTS_DB[number]
 
 /**
  * Cached function to fetch all products
- * Tagged with 'products' for cache invalidation
+ * The "use cache" directive makes this function's result cacheable
+ * cacheTag() assigns a tag that can be used with revalidateTag() to invalidate
  */
 export async function getProducts(): Promise<Product[]> {
+  "use cache"
   cacheTag('products')
+  
+  console.log('[v0] getProducts called')
   
   // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 500))
   
-  console.log('[Cache] Fetching all products from database...')
+  console.log('[v0] getProducts returning', PRODUCTS_DB.length, 'products')
   return PRODUCTS_DB
 }
 
@@ -33,6 +35,7 @@ export async function getProducts(): Promise<Product[]> {
  * Tagged with both 'products' and specific 'product-{id}'
  */
 export async function getProduct(id: string): Promise<Product | undefined> {
+  "use cache"
   cacheTag('products', `product-${id}`)
   
   // Simulate network delay
@@ -47,6 +50,7 @@ export async function getProduct(id: string): Promise<Product | undefined> {
  * Tagged with 'products' and 'category-{category}'
  */
 export async function getProductsByCategory(category: string): Promise<Product[]> {
+  "use cache"
   cacheTag('products', `category-${category}`)
   
   // Simulate network delay
@@ -61,6 +65,7 @@ export async function getProductsByCategory(category: string): Promise<Product[]
  * Tagged with 'products-stats'
  */
 export async function getProductStats() {
+  "use cache"
   cacheTag('products-stats')
   
   // Simulate expensive computation

@@ -1,16 +1,16 @@
-"use cache"
-
 /**
- * Layout with "use cache" directive
+ * Cache Demo Layout
  * 
- * When both layout and page have "use cache", they are cached independently.
- * This layout provides the shell that can be served instantly from cache.
+ * This layout provides the shell for the cache demo pages.
+ * The layout itself doesn't use "use cache" because we want to demonstrate
+ * caching at the component and function level instead.
  */
 export default function CacheDemoLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  console.log('[v0] CacheDemoLayout rendering')
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">

@@ -1,5 +1,3 @@
-"use cache"
-
 import { getProductsByCategory, type Product } from '@/lib/products'
 
 interface CategoryProductsProps {
@@ -7,12 +5,11 @@ interface CategoryProductsProps {
 }
 
 /**
- * CategoryProducts - A Cache Component with dynamic props
+ * CategoryProducts - Server Component filtered by category
  * 
- * The cache key automatically includes the `category` prop,
- * so each category gets its own cached version.
- * 
- * Cache tags: 'products', 'category-{category}'
+ * Each call to getProductsByCategory(category) is cached independently
+ * via "use cache" + cacheTag() with tags 'products' and 'category-{category}'.
+ * This means each category has its own cache entry.
  */
 export async function CategoryProducts({ category }: CategoryProductsProps) {
   const products = await getProductsByCategory(category)
