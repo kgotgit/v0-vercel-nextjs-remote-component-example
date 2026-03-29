@@ -174,10 +174,6 @@ export default function Page() {
         </div>
       </section>
 
-      {/* Page Render Time */}
-      <div className="text-center text-xs text-gray-500">
-        Page component rendered at: {new Date().toISOString()} (cached)
-      </div>
     </div>
   )
 }
