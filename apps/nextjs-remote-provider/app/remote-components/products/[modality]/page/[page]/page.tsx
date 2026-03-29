@@ -5,8 +5,8 @@ type PageProps = {
   params: Promise<{ modality: string; page: string }>;
 };
 
-export const revalidate = 3600;
-export const dynamicParams = true;
+// Note: revalidate and dynamicParams route segment configs are not compatible
+// with cacheComponents. Use "use cache" + cacheTag() for caching instead.
 
 export default async function ProductsPage({ params }: PageProps) {
   const { modality, page } = await params;

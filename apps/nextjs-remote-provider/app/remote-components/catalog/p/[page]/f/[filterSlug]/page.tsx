@@ -1,7 +1,8 @@
 import { RemoteComponent } from "remote-components/next";
 import { CatalogServer } from "./catalog.server";
 
-export const revalidate = 120;
+// Note: revalidate route segment config is not compatible with cacheComponents.
+// Use "use cache" + cacheTag() for caching instead.
 
 type CatalogPageParams = {
   page: string;
