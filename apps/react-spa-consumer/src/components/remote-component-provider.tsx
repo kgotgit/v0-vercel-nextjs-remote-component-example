@@ -59,11 +59,30 @@ export function RemoteComponentProvider({ children }: { children: ReactNode }) {
     };
 
     const onDocumentClick = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
+      if (event.defaultPrevented) {
         return;
       }
-      const anchor = target.closest("a[data-remote-path]") as HTMLAnchorElement | null;
+
+      if (event.button !== 0) {
+        return;
+      }
+
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      const anchorFromPath = path.find(
+        (node) => node instanceof HTMLAnchorElement && node.hasAttribute("data-remote-path")
+      ) as HTMLAnchorElement | undefined;
+
+      const target = event.target;
+      const anchorFromTarget =
+        target instanceof Element
+          ? (target.closest("a[data-remote-path]") as HTMLAnchorElement | null)
+          : null;
+
+      const anchor = anchorFromPath ?? anchorFromTarget;
       if (!anchor) {
         return;
       }
@@ -82,11 +101,11 @@ export function RemoteComponentProvider({ children }: { children: ReactNode }) {
     };
 
     window.addEventListener("popstate", onPopState);
-    document.addEventListener("click", onDocumentClick);
+    document.addEventListener("click", onDocumentClick, true);
 
     return () => {
       window.removeEventListener("popstate", onPopState);
-      document.removeEventListener("click", onDocumentClick);
+      document.removeEventListener("click", onDocumentClick, true);
     };
   }, [navigateRemote]);
 
