@@ -1,4 +1,6 @@
 import { cacheTag } from 'next/cache'
+import { registerCacheEntry } from './cache-registry'
+import { traceCacheOperation } from './cache-tracer'
 
 // Helper to generate a random fetch ID - this changes each time the function actually runs
 // When you see the same fetchId, the data was served from cache
@@ -28,15 +30,26 @@ export async function getProducts() {
   "use cache"
   cacheTag('products')
   
+  const startTime = Date.now()
+  
   // Simulate network delay (longer to show Suspense fallback on cache miss)
   await new Promise(resolve => setTimeout(resolve, 1500))
   
   const fetchId = generateFetchId()
-  return { 
+  const result = { 
     products: PRODUCTS_DB, 
     fetchId,
     tag: 'products' 
   }
+  
+  // Register in shadow cache for inspection
+  registerCacheEntry('products', result, fetchId)
+  
+  // Trace this cache operation for request-scoped debugging
+  const size = new Blob([JSON.stringify(result)]).size
+  traceCacheOperation('products', fetchId, startTime, size)
+  
+  return result
 }
 
 /**
@@ -62,15 +75,27 @@ export async function getProductsByCategory(category: string) {
   "use cache"
   cacheTag('products', `category-${category}`)
   
+  const startTime = Date.now()
+  
   // Simulate network delay (longer to show Suspense fallback on cache miss)
   await new Promise(resolve => setTimeout(resolve, 1200))
   
   const fetchId = generateFetchId()
-  return { 
+  const tag = `category-${category}`
+  const result = { 
     products: PRODUCTS_DB.filter(p => p.category === category),
     fetchId,
-    tag: `category-${category}`
+    tag
   }
+  
+  // Register in shadow cache for inspection
+  registerCacheEntry(tag, result, fetchId)
+  
+  // Trace this cache operation
+  const size = new Blob([JSON.stringify(result)]).size
+  traceCacheOperation(tag, fetchId, startTime, size)
+  
+  return result
 }
 
 /**
@@ -81,10 +106,10 @@ export async function getProductStats() {
   "use cache"
   cacheTag('products-stats')
   
+  const startTime = Date.now()
+  
   // Simulate expensive computation (longer to show Suspense fallback on cache miss)
   await new Promise(resolve => setTimeout(resolve, 2000))
-  
-
   
   const totalProducts = PRODUCTS_DB.length
   const totalStock = PRODUCTS_DB.reduce((sum, p) => sum + p.stock, 0)
@@ -92,7 +117,7 @@ export async function getProductStats() {
   const categories = [...new Set(PRODUCTS_DB.map(p => p.category))]
   
   const fetchId = generateFetchId()
-  return {
+  const result = {
     totalProducts,
     totalStock,
     avgPrice: avgPrice.toFixed(2),
@@ -100,4 +125,13 @@ export async function getProductStats() {
     fetchId,
     tag: 'products-stats'
   }
+  
+  // Register in shadow cache for inspection
+  registerCacheEntry('products-stats', result, fetchId)
+  
+  // Trace this cache operation
+  const size = new Blob([JSON.stringify(result)]).size
+  traceCacheOperation('products-stats', fetchId, startTime, size)
+  
+  return result
 }
