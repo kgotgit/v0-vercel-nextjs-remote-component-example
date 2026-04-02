@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import { after } from 'next/server'
 import { ProductList } from './components/product-list'
 import { ProductStats } from './components/product-stats'
 import { CategoryProducts } from './components/category-products'
@@ -7,7 +8,7 @@ import { RevalidateButtons } from './components/revalidate-buttons'
 import { CacheStatusSection } from './components/cache-status-section'
 import { CacheInspectorDashboard } from './components/cache-inspector-dashboard'
 import { RequestTraceSection } from './components/request-trace-section'
-import { resetCacheTrace } from '@/lib/cache-tracer'
+import { resetCacheTrace, storeCurrentTrace, getCacheTrace } from '@/lib/cache-tracer'
 import {
   ProductListSkeleton,
   ProductStatsSkeleton,

@@ -1,14 +1,14 @@
 /**
- * Request-Scoped Cache Tracer
+ * Request-Scoped Cache Tracer with after() persistence
  * 
- * Simple module-level trace that collects cache operations during a request.
- * Since "use cache" functions only execute on cache MISS, any operation
- * recorded here represents fresh data being fetched.
+ * Architecture:
+ * 1. Request arrives → Page.tsx calls resetCacheTrace()
+ * 2. Each "use cache" function calls traceCacheOperation() on cache MISS
+ * 3. After response sent → after() stores trace to persistent store
+ * 4. API route can query stored traces for visualization
  * 
- * Flow:
- * 1. resetCacheTrace() is called at the start of page render
- * 2. Each "use cache" function calls traceCacheOperation() when executing
- * 3. getCacheTrace() returns all operations that ran during this render
+ * The trace only captures cache MISSES because "use cache" functions
+ * don't execute their body when serving from cache.
  */
 
 export type CacheOperation = {
@@ -22,13 +22,23 @@ export type CacheOperation = {
 
 export type CacheTrace = {
   requestId: string
+  route: string
   startTime: number
+  endTime?: number
   operations: CacheOperation[]
 }
 
-// Module-level trace storage
-// In serverless, each request gets a fresh module instance
+export type StoredTrace = CacheTrace & {
+  storedAt: number
+}
+
+// Module-level trace for current request
 let currentTrace: CacheTrace | null = null
+
+// In-memory store for traces (for demo - use Redis/KV in production)
+// This persists across requests in the same serverless instance
+const traceStore = new Map<string, StoredTrace>()
+const MAX_STORED_TRACES = 50
 
 /**
  * Generate a unique request ID
@@ -39,22 +49,21 @@ function generateRequestId(): string {
 
 /**
  * Reset/start a new cache trace for this request
- * Call this at the beginning of page render
+ * Call at the beginning of page render
  */
-export function resetCacheTrace(): CacheTrace {
+export function resetCacheTrace(route: string = '/unknown'): CacheTrace {
   currentTrace = {
     requestId: generateRequestId(),
+    route,
     startTime: Date.now(),
     operations: [],
   }
-  console.log('[v0] Cache trace started:', currentTrace.requestId)
   return currentTrace
 }
 
 /**
  * Record a cache operation in the current trace
- * Call this inside each "use cache" function
- * Note: This only runs on cache MISS (when the function actually executes)
+ * Call inside each "use cache" function (only runs on cache MISS)
  */
 export function traceCacheOperation(
   tag: string,
@@ -63,7 +72,6 @@ export function traceCacheOperation(
   dataSize: number
 ): void {
   if (!currentTrace) {
-    // Auto-initialize if not started
     resetCacheTrace()
   }
 
@@ -77,30 +85,90 @@ export function traceCacheOperation(
   }
 
   currentTrace!.operations.push(operation)
-  console.log('[v0] Cache operation traced:', tag, fetchId, `${operation.duration}ms`)
 }
 
 /**
- * Get the current cache trace
+ * Get the current trace (for reading during render)
  */
 export function getCacheTrace(): CacheTrace | null {
   return currentTrace
 }
 
 /**
- * Format trace as JSON for debugging
+ * Finalize and store the trace
+ * Call this inside after() to persist the trace post-response
+ */
+export function storeCurrentTrace(): StoredTrace | null {
+  if (!currentTrace) return null
+  
+  const storedTrace: StoredTrace = {
+    ...currentTrace,
+    endTime: Date.now(),
+    storedAt: Date.now(),
+  }
+  
+  // Store with requestId as key
+  traceStore.set(currentTrace.requestId, storedTrace)
+  
+  // Prune old traces if over limit
+  if (traceStore.size > MAX_STORED_TRACES) {
+    const oldest = [...traceStore.entries()]
+      .sort((a, b) => a[1].storedAt - b[1].storedAt)[0]
+    if (oldest) traceStore.delete(oldest[0])
+  }
+  
+  return storedTrace
+}
+
+/**
+ * Get a stored trace by requestId
+ */
+export function getStoredTrace(requestId: string): StoredTrace | undefined {
+  return traceStore.get(requestId)
+}
+
+/**
+ * Get all stored traces (most recent first)
+ */
+export function getAllStoredTraces(): StoredTrace[] {
+  return [...traceStore.values()].sort((a, b) => b.storedAt - a.storedAt)
+}
+
+/**
+ * Get recent traces for a specific route
+ */
+export function getTracesByRoute(route: string, limit: number = 10): StoredTrace[] {
+  return getAllStoredTraces()
+    .filter(t => t.route === route)
+    .slice(0, limit)
+}
+
+/**
+ * Clear all stored traces
+ */
+export function clearAllTraces(): void {
+  traceStore.clear()
+}
+
+/**
+ * Format trace for display
  */
 export function formatTraceAsJson(trace: CacheTrace | null): object | null {
   if (!trace) return null
+  
+  const totalDuration = (trace.endTime || Date.now()) - trace.startTime
+  
   return {
     requestId: trace.requestId,
-    totalDuration: Date.now() - trace.startTime,
+    route: trace.route,
+    totalDuration,
     operationCount: trace.operations.length,
+    allCached: trace.operations.length === 0,
     operations: trace.operations.map(op => ({
       tag: op.tag,
       fetchId: op.fetchId,
-      duration: `${op.duration}ms`,
-      size: `${op.size} bytes`,
+      duration: op.duration,
+      size: op.size,
       source: op.source,
     })),
     summary: {
@@ -112,39 +180,20 @@ export function formatTraceAsJson(trace: CacheTrace | null): object | null {
 }
 
 /**
- * Higher-order function to wrap cached functions with tracing
- * 
- * Usage:
- * ```ts
- * async function _getProducts() {
- *   "use cache"
- *   cacheTag('products')
- *   // ... fetch logic
- * }
- * export const getProducts = withCacheTracing('products', _getProducts)
- * ```
+ * Get trace store stats
  */
-export function withCacheTracing<T extends (...args: any[]) => Promise<any>>(
-  tag: string,
-  fn: T
-): T {
-  return (async (...args: Parameters<T>) => {
-    const startTime = Date.now()
-    const fetchId = Math.random().toString(36).substring(2, 8).toUpperCase()
-    
-    const result = await fn(...args)
-    
-    // Calculate size of result
-    const size = new Blob([JSON.stringify(result)]).size
-    
-    // Record in trace
-    traceCacheOperation(tag, fetchId, startTime, size)
-    
-    // Attach metadata to result if it's an object
-    if (result && typeof result === 'object') {
-      return { ...result, _trace: { tag, fetchId, duration: Date.now() - startTime } }
-    }
-    
-    return result
-  }) as T
+export function getTraceStoreStats() {
+  const traces = getAllStoredTraces()
+  const totalOps = traces.reduce((sum, t) => sum + t.operations.length, 0)
+  const cachedRequests = traces.filter(t => t.operations.length === 0).length
+  
+  return {
+    totalTraces: traces.length,
+    totalOperations: totalOps,
+    cachedRequests,
+    cacheHitRate: traces.length > 0 
+      ? `${((cachedRequests / traces.length) * 100).toFixed(1)}%` 
+      : '0%',
+    routes: [...new Set(traces.map(t => t.route))],
+  }
 }
