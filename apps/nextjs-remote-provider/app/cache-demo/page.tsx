@@ -4,6 +4,7 @@ import { ProductStats } from './components/product-stats'
 import { CategoryProducts } from './components/category-products'
 import { DynamicUserInfo } from './components/dynamic-user-info'
 import { RevalidateButtons } from './components/revalidate-buttons'
+import { CacheStatusSection } from './components/cache-status-section'
 import {
   ProductListSkeleton,
   ProductStatsSkeleton,
@@ -60,6 +61,20 @@ export default function CacheDemoPage() {
             </p>
           </div>
         </div>
+      </section>
+
+      {/* Cache Status Monitor */}
+      <section>
+        <Suspense fallback={
+          <div className="bg-gray-900 rounded-xl border border-gray-700 p-6">
+            <div className="animate-pulse flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-gray-600" />
+              <div className="h-4 bg-gray-700 rounded w-48" />
+            </div>
+          </div>
+        }>
+          <CacheStatusSection />
+        </Suspense>
       </section>
 
       {/* Revalidation Controls */}
