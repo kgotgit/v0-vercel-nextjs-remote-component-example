@@ -32,12 +32,16 @@ export function TraceSummary() {
     // Small delay to allow after() to complete and store the trace
     const timer = setTimeout(async () => {
       try {
+        console.log('[v0] TraceSummary: fetching trace from /api/traces?route=/cache-demo')
         const res = await fetch('/api/traces?route=/cache-demo')
-        if (!res.ok) throw new Error('Failed to fetch trace')
         const data = await res.json()
+        console.log('[v0] TraceSummary: API response:', data)
+        if (!res.ok) throw new Error('Failed to fetch trace')
         setTrace(data.trace || null)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Unknown error')
+        const msg = e instanceof Error ? e.message : 'Unknown error'
+        console.error('[v0] TraceSummary: error:', msg)
+        setError(msg)
       } finally {
         setLoading(false)
       }

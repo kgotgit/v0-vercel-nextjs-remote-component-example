@@ -133,7 +133,12 @@ export function getCurrentTrace(): CacheTrace | null {
  * Call this inside after() to persist post-response
  */
 export async function finalizeAndStoreTrace(): Promise<StoredTrace | null> {
-  if (!currentTrace) return null
+  if (!currentTrace) {
+    console.log('[v0] finalizeAndStoreTrace: no trace to store')
+    return null
+  }
+  
+  console.log('[v0] finalizeAndStoreTrace: storing trace', currentTrace.requestId, 'with', currentTrace.operations.length, 'ops')
   
   const endTime = Date.now()
   const totalDuration = endTime - currentTrace.startTime
@@ -167,12 +172,14 @@ export async function finalizeAndStoreTrace(): Promise<StoredTrace | null> {
   // Store to Runtime Cache
   try {
     const cache = getCache()
+    console.log('[v0] Runtime Cache acquired, storing trace')
     
     // Store the trace with route-based key
     await cache.set(`trace:${currentTrace.route}:latest`, storedTrace, {
       ttl: 3600, // 1 hour
       tags: ['cache-traces', `trace:${currentTrace.route}`],
     })
+    console.log('[v0] Trace stored to Runtime Cache:', `trace:${currentTrace.route}:latest`)
     
     // Also store by requestId for direct lookup
     await cache.set(`trace:id:${currentTrace.requestId}`, storedTrace, {
@@ -192,7 +199,7 @@ export async function finalizeAndStoreTrace(): Promise<StoredTrace | null> {
     
   } catch (error) {
     // Runtime Cache might not be available in all environments
-    console.error('[CacheTracer] Failed to store trace:', error)
+    console.error('[v0] Failed to store trace:', error)
   }
   
   return storedTrace
