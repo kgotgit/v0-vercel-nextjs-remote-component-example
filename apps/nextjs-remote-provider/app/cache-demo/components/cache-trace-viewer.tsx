@@ -43,6 +43,7 @@ export function CacheTraceViewer({ traceData }: { traceData?: CacheTraceData }) 
   }
 
   const currentTrace = traceData || traces[0]
+  const isAllCached = currentTrace?.operationCount === 0
 
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-700 overflow-hidden">
@@ -52,10 +53,15 @@ export function CacheTraceViewer({ traceData }: { traceData?: CacheTraceData }) 
         className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-800 transition-colors"
       >
         <div className="flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          <div className={`w-2 h-2 rounded-full ${isAllCached ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} />
           <span className="text-white font-mono text-sm">
             Request Trace: {currentTrace?.requestId}
           </span>
+          {isAllCached && (
+            <span className="px-2 py-0.5 bg-emerald-900/50 text-emerald-400 text-xs rounded-full">
+              100% CACHED
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-4">
           <span className="text-gray-400 text-xs">
@@ -75,7 +81,25 @@ export function CacheTraceViewer({ traceData }: { traceData?: CacheTraceData }) 
       {/* Expanded Content */}
       {isExpanded && currentTrace && (
         <div className="border-t border-gray-700">
+          {/* All Cached Message */}
+          {isAllCached && (
+            <div className="p-4 border-b border-gray-800 bg-emerald-900/20">
+              <div className="flex items-center gap-3">
+                <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <div>
+                  <p className="text-emerald-400 font-medium">All data served from cache</p>
+                  <p className="text-emerald-600 text-sm">
+                    No cache operations ran - all data was cached. Click &quot;Revalidate All&quot; and refresh to see the trace.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Timeline visualization */}
+          {!isAllCached && (
           <div className="p-4 border-b border-gray-800">
             <h4 className="text-xs text-gray-500 uppercase tracking-wide mb-3">Request Timeline</h4>
             <div className="space-y-2">
@@ -104,6 +128,7 @@ export function CacheTraceViewer({ traceData }: { traceData?: CacheTraceData }) 
               ))}
             </div>
           </div>
+          )}
 
           {/* Summary */}
           <div className="p-4 grid grid-cols-3 gap-4">
