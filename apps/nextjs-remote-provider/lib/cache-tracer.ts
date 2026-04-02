@@ -1,25 +1,37 @@
 /**
- * Request-Scoped Cache Tracer with Runtime Cache persistence
- * 
- * Architecture:
- * 1. Request arrives → resetTrace('/route') initializes trace
- * 2. Suspense components render concurrently
- * 3. Each "use cache" function calls recordCacheOp() on cache MISS
- * 4. Response streams to client (all Suspense boundaries resolve)
- * 5. after() runs → finalizeAndStoreTrace() persists to Runtime Cache
- * 6. API route queries stored traces for visualization
- * 
- * Key insight: Only cache MISSES are traced because "use cache" 
- * functions don't execute their body when serving from cache.
- * 
- * PPR / AsyncLocalStorage note:
- * With cacheComponents: true (PPR), the synchronous page shell is prerendered
- * at build time while dynamic Suspense children stream per-request.
- * AsyncLocalStorage scopes the currentTrace to the per-request async context
- * so prerender and runtime don't bleed into each other.
+ * Request-Scoped Cache Tracer — Ring Buffer Architecture
+ *
+ * WHY a ring buffer instead of per-request state:
+ *
+ * `"use cache"` function bodies run in an isolated async context — Next.js
+ * intentionally breaks AsyncLocalStorage propagation into them so that
+ * request-scoped data (headers, cookies, etc.) cannot leak into cached outputs.
+ * This means we can never correlate a "use cache" execution to a specific
+ * request through async context. Module-level (process-global) state is the
+ * only thing readable from inside a "use cache" body.
+ *
+ * The previous approach used a single global `fallbackTrace` and called
+ * `resetTrace()` on each request — but `resetTrace()` would null out the
+ * global while a concurrent request's "use cache" ops were still mid-flight,
+ * causing `finalizeAndStoreTrace()` to find an empty trace.
+ *
+ * Ring buffer solution:
+ * - `recordCacheOp()` always appends to a circular buffer (no reset needed)
+ * - `TraceSetup` (async server component) captures `requestStartTime = Date.now()`
+ *   at request time, BEFORE any "use cache" bodies execute
+ * - `finalizeAndStoreTrace(requestStartTime, route)` is called in `after()` and
+ *   claims all ops whose `opStartTime >= requestStartTime - JITTER_BUFFER_MS`
+ *   and `opStartTime <= endTime`
+ * - Because "use cache" bodies are triggered by React rendering this request's
+ *   Suspense tree, their `opStartTime` will always be >= the request's start time
+ *
+ * Concurrency safety:
+ * - No global is ever nulled out between recordCacheOp and finalizeAndStoreTrace
+ * - Concurrent requests claim non-overlapping time windows
+ *   (op durations are 1200–2000ms; requests are much further apart in practice)
+ * - JITTER_BUFFER_MS handles microtask scheduling variance between TraceSetup
+ *   and sibling Suspense children starting their "use cache" functions
  */
-
-import { AsyncLocalStorage } from 'async_hooks'
 
 // Try to import getCache - only available on Vercel infrastructure
 let getCache: (() => ReturnType<typeof import('@vercel/functions').getCache>) | null = null
@@ -28,7 +40,7 @@ try {
   const vercelFunctions = require('@vercel/functions')
   getCache = vercelFunctions.getCache
 } catch {
-  // @vercel/functions not available or getCache not accessible locally
+  // @vercel/functions not available locally
 }
 
 // ============================================================================
@@ -38,64 +50,49 @@ try {
 export type CacheOperation = {
   tag: string
   fetchId: string
-  startedAt: number      // Relative to request start (ms)
-  completedAt: number    // Relative to request start (ms)
-  duration: number       // How long the fetch took (ms)
-  size: number           // Response size in bytes
+  startedAt: number    // ms relative to request start
+  completedAt: number  // ms relative to request start
+  duration: number     // ms the "use cache" body took
+  size: number         // bytes
 }
 
 export type CacheTrace = {
   requestId: string
   route: string
-  startTime: number      // Absolute timestamp
+  startTime: number    // absolute ms timestamp
   operations: CacheOperation[]
 }
 
 export type StoredTrace = CacheTrace & {
   endTime: number
   totalDuration: number
-  /** The deployment that produced this trace (VERCEL_DEPLOYMENT_ID or a local process ID). */
   deploymentId: string
   summary: {
     totalOps: number
     totalFetchTime: number
     totalSize: number
     tags: string[]
-    parallelSavings: number  // Time saved by parallel execution
+    parallelSavings: number
   }
 }
 
 // ============================================================================
-// Per-request storage via AsyncLocalStorage
-// Falls back to module-level state for non-async contexts (e.g., dev mode SSR)
+// Internal ring buffer entry
 // ============================================================================
 
-type TraceContext = {
-  trace: CacheTrace | null
-  pendingRoute: string | null
+type BufferedOp = {
+  tag: string
+  fetchId: string
+  opStartTime: number  // absolute ms — when the "use cache" body started
+  wallTime: number     // absolute ms — when recordCacheOp was called (body end)
+  duration: number     // wallTime - opStartTime
+  size: number
 }
-
-const traceStorage = new AsyncLocalStorage<TraceContext>()
-
-// Module-level fallback for plain SSR (non-PPR) dev mode
-let fallbackTrace: CacheTrace | null = null
-let fallbackPendingRoute: string | null = null
 
 // ============================================================================
 // Deployment identity
 // ============================================================================
 
-/**
- * A stable ID that is unique per deployment.
- *
- * - On Vercel: VERCEL_DEPLOYMENT_ID is injected at build time and is unique
- *   for every deploy, so traces from different deploys never collide in the
- *   shared Runtime Cache.
- *
- * - Locally / non-Vercel: we generate a random ID once when the module is
- *   first imported (i.e. when the Node process starts). Restarting the dev
- *   server produces a new ID, which mirrors the "new deployment" boundary.
- */
 const DEPLOYMENT_ID: string =
   process.env.VERCEL_DEPLOYMENT_ID ??
   `local_${Math.random().toString(36).substring(2, 10)}`
@@ -104,100 +101,50 @@ export function getDeploymentId(): string {
   return DEPLOYMENT_ID
 }
 
-/** Build a namespaced cache key that is scoped to this deployment. */
 function traceKey(suffix: string): string {
   return `trace:${DEPLOYMENT_ID}:${suffix}`
 }
 
 // ============================================================================
-// In-memory fallback store when Vercel Runtime Cache is not available (local dev)
+// Ring buffer (process-global — safe to read from "use cache" bodies)
 // ============================================================================
+
+const MAX_BUFFER = 500
+
+/**
+ * Time window (ms) subtracted from requestStartTime when claiming ops.
+ * Handles the edge case where a sibling Suspense boundary starts its
+ * "use cache" function body a few microseconds before TraceSetup's
+ * `requestStartTime = Date.now()` executes.
+ */
+const JITTER_BUFFER_MS = 100
+
+const opRingBuffer: BufferedOp[] = []
+
+// ============================================================================
+// In-memory fallback store (local dev / non-Vercel)
+// ============================================================================
+
 const localTraceByRouteLatest = new Map<string, StoredTrace>()
 const localTraceById = new Map<string, StoredTrace>()
 const localRecentIds = new Map<string, string[]>()
-
-function getContext(): TraceContext {
-  const ctx = traceStorage.getStore()
-  if (ctx) return ctx
-  // Fallback: use module-level vars (works in plain SSR / dev)
-  return { trace: fallbackTrace, pendingRoute: fallbackPendingRoute }
-}
-
-function setTrace(trace: CacheTrace | null): void {
-  const ctx = traceStorage.getStore()
-  if (ctx) {
-    ctx.trace = trace
-  } else {
-    fallbackTrace = trace
-  }
-}
-
-function setPendingRoute(route: string): void {
-  const ctx = traceStorage.getStore()
-  if (ctx) {
-    ctx.pendingRoute = route
-  } else {
-    fallbackPendingRoute = route
-  }
-}
 
 function generateRequestId(): string {
   return `req_${Math.random().toString(36).substring(2, 10)}`
 }
 
 // ============================================================================
-// Trace Collection API (called during render)
+// Trace Collection API
 // ============================================================================
 
 /**
- * Mark the route for tracing.
- * Wrap your page in runWithTraceContext() for proper per-request isolation.
- * Falls back to module-level state in plain SSR / dev mode.
- */
-export function resetTrace(route: string): void {
-  console.log('[CacheTracer] resetTrace:', route)
-  setPendingRoute(route)
-  setTrace(null)
-}
-
-/**
- * Run an async function with a fresh per-request trace context.
- * Use this in middleware or a layout to initialize AsyncLocalStorage.
- * 
- * @example
- * // In a server layout or middleware:
- * export default async function Layout({ children }) {
- *   return runWithTraceContext('/your-route', async () => {
- *     return children
- *   })
- * }
- */
-export function runWithTraceContext<T>(route: string, fn: () => T): T {
-  const ctx: TraceContext = { trace: null, pendingRoute: route }
-  return traceStorage.run(ctx, fn)
-}
-
-/**
- * Initialize trace lazily (called from recordCacheOp)
- */
-function ensureTraceInitialized(timestamp: number): CacheTrace {
-  const ctx = getContext()
-  if (!ctx.trace) {
-    const newTrace: CacheTrace = {
-      requestId: generateRequestId(),
-      route: ctx.pendingRoute || '/unknown',
-      startTime: timestamp,
-      operations: [],
-    }
-    setTrace(newTrace)
-    console.log('[CacheTracer] Trace initialized:', newTrace.requestId, 'route:', newTrace.route)
-    return newTrace
-  }
-  return ctx.trace
-}
-
-/**
- * Record a cache operation (called inside "use cache" functions on cache MISS).
+ * Record a cache miss operation.
+ * Called inside "use cache" function bodies — only executes on cache MISS.
+ *
+ * @param tag        The cacheTag() value for this operation
+ * @param fetchId    A random ID generated per execution (same ID = cached)
+ * @param opStartTime  Date.now() captured at the START of the "use cache" body
+ * @param size       Byte size of the returned value
  */
 export function recordCacheOp(
   tag: string,
@@ -205,99 +152,110 @@ export function recordCacheOp(
   opStartTime: number,
   size: number
 ): void {
-  const trace = ensureTraceInitialized(opStartTime)
-  const now = Date.now()
-  const operation: CacheOperation = {
-    tag,
-    fetchId,
-    startedAt: opStartTime - trace.startTime,
-    completedAt: now - trace.startTime,
-    duration: now - opStartTime,
-    size,
-  }
-  trace.operations.push(operation)
-  console.log('[CacheTracer] recordCacheOp:', tag, 'duration:', operation.duration, 'ms')
+  const wallTime = Date.now()
+  if (opRingBuffer.length >= MAX_BUFFER) opRingBuffer.shift()
+  opRingBuffer.push({ tag, fetchId, opStartTime, wallTime, duration: wallTime - opStartTime, size })
+  console.log('[CacheTracer] recordCacheOp:', tag, 'duration:', wallTime - opStartTime, 'ms | buffer:', opRingBuffer.length)
 }
 
 /**
- * Get current trace for the request context.
- * NOTE: In PPR, this will be null/empty when called from the static shell
- * because async Suspense children haven't executed yet.
- * Use StoredTracesViewer (reads from after() → API) for reliable trace data.
+ * Returns a snapshot of recent ops for the "current request" viewer.
+ * Best-effort only — shows ops recorded in the last 30 seconds.
+ * For reliable data use the Stored Trace section (written by after()).
  */
-export function getCurrentTrace(): CacheTrace | null {
-  const ctx = getContext()
-  console.log('[CacheTracer] getCurrentTrace:', ctx.trace ? `${ctx.trace.operations.length} ops` : 'null')
-  return ctx.trace
+export function getRecentOpsSnapshot(): CacheOperation[] | null {
+  const cutoff = Date.now() - 30_000
+  const recent = opRingBuffer.filter(op => op.wallTime >= cutoff)
+  if (recent.length === 0) return null
+  const base = Math.min(...recent.map(op => op.opStartTime))
+  return recent.map(op => ({
+    tag: op.tag,
+    fetchId: op.fetchId,
+    startedAt: op.opStartTime - base,
+    completedAt: op.wallTime - base,
+    duration: op.duration,
+    size: op.size,
+  }))
 }
 
 // ============================================================================
-// Trace Storage API (called in after())
+// Trace Storage API — call finalizeAndStoreTrace inside after()
 // ============================================================================
 
 /**
- * Finalize the trace and store it to Runtime Cache (Vercel) or in-memory Map (local).
- * Call this inside after() to persist post-response.
+ * Claim ops that belong to this request and persist the trace.
+ *
+ * @param requestStartTime  Date.now() captured in TraceSetup BEFORE any
+ *                          "use cache" bodies execute for this request.
+ * @param route             The page route (e.g. '/cache-demo')
  */
-export async function finalizeAndStoreTrace(): Promise<StoredTrace | null> {
-  const currentTrace = getContext().trace
-  if (!currentTrace) {
-    console.log('[CacheTracer] finalizeAndStoreTrace: no trace to store')
-    return null
-  }
-
+export async function finalizeAndStoreTrace(
+  requestStartTime: number,
+  route: string,
+): Promise<StoredTrace | null> {
   const endTime = Date.now()
-  const totalDuration = endTime - currentTrace.startTime
 
-  // Calculate summary
-  const ops = currentTrace.operations
-  const totalFetchTime = ops.reduce((sum, op) => sum + op.duration, 0)
-  const totalSize = ops.reduce((sum, op) => sum + op.size, 0)
-  const tags = [...new Set(ops.map(op => op.tag))]
+  // Claim ops whose body started within this request's time window.
+  // JITTER_BUFFER_MS handles microtask scheduling variance.
+  const claimFrom = requestStartTime - JITTER_BUFFER_MS
+  const myOps = opRingBuffer.filter(
+    op => op.opStartTime >= claimFrom && op.opStartTime <= endTime
+  )
 
-  // Calculate time saved by parallel execution
-  const maxCompletedAt = ops.length > 0 ? Math.max(...ops.map(op => op.completedAt)) : 0
-  const parallelSavings = totalFetchTime - maxCompletedAt
+  console.log(
+    `[CacheTracer] finalizeAndStoreTrace: route=${route} ` +
+    `window=[${claimFrom}–${endTime}] claimed=${myOps.length} buffered=${opRingBuffer.length}`
+  )
+
+  const operations: CacheOperation[] = myOps.map(op => ({
+    tag: op.tag,
+    fetchId: op.fetchId,
+    startedAt: op.opStartTime - requestStartTime,
+    completedAt: op.wallTime - requestStartTime,
+    duration: op.duration,
+    size: op.size,
+  }))
+
+  const totalFetchTime = operations.reduce((s, op) => s + op.duration, 0)
+  const totalSize = operations.reduce((s, op) => s + op.size, 0)
+  const tags = [...new Set(operations.map(op => op.tag))]
+  const maxCompletedAt = operations.length > 0 ? Math.max(...operations.map(op => op.completedAt)) : 0
 
   const storedTrace: StoredTrace = {
-    ...currentTrace,
+    requestId: generateRequestId(),
+    route,
+    startTime: requestStartTime,
     endTime,
-    totalDuration,
+    totalDuration: endTime - requestStartTime,
     deploymentId: DEPLOYMENT_ID,
+    operations,
     summary: {
-      totalOps: ops.length,
+      totalOps: operations.length,
       totalFetchTime,
       totalSize,
       tags,
-      parallelSavings: Math.max(0, parallelSavings),
+      parallelSavings: Math.max(0, totalFetchTime - maxCompletedAt),
     },
   }
 
-  const routeKey = currentTrace.route
-
-  // Try Vercel Runtime Cache first; fall back to in-memory Map for local dev
+  // Try Vercel Runtime Cache; fall back to in-memory Map for local dev
   let usedVercelCache = false
   if (getCache) {
     try {
       const cache = getCache()
-      // All keys are scoped to the current deployment ID so a redeploy never
-      // serves stale traces from a previous version.
-      await cache.set(traceKey(`${routeKey}:latest`), storedTrace, {
+      await cache.set(traceKey(`${route}:latest`), storedTrace, {
         ttl: 3600,
-        tags: ['cache-traces', traceKey(routeKey)],
+        tags: ['cache-traces', traceKey(route)],
       })
-      await cache.set(traceKey(`id:${currentTrace.requestId}`), storedTrace, {
+      await cache.set(traceKey(`id:${storedTrace.requestId}`), storedTrace, {
         ttl: 3600,
         tags: ['cache-traces'],
       })
-      const recentCacheKey = traceKey(`recent:${routeKey}`)
+      const recentCacheKey = traceKey(`recent:${route}`)
       const existing = (await cache.get(recentCacheKey)) as string[] | null
       const recent = existing || []
-      recent.unshift(currentTrace.requestId)
-      await cache.set(recentCacheKey, recent.slice(0, 20), {
-        ttl: 3600,
-        tags: ['cache-traces'],
-      })
+      recent.unshift(storedTrace.requestId)
+      await cache.set(recentCacheKey, recent.slice(0, 20), { ttl: 3600, tags: ['cache-traces'] })
       usedVercelCache = true
     } catch (error) {
       console.warn('[CacheTracer] Vercel Runtime Cache unavailable, using in-memory fallback:', String(error))
@@ -305,15 +263,14 @@ export async function finalizeAndStoreTrace(): Promise<StoredTrace | null> {
   }
 
   if (!usedVercelCache) {
-    // In-memory fallback (local dev / non-Vercel environments).
-    // Keys are plain strings because the in-memory Map is already process-scoped
-    // (a new process = new deployment = fresh Map), so no prefix is needed.
-    localTraceByRouteLatest.set(routeKey, storedTrace)
-    localTraceById.set(currentTrace.requestId, storedTrace)
-    const recent = localRecentIds.get(routeKey) || []
-    recent.unshift(currentTrace.requestId)
-    localRecentIds.set(routeKey, recent.slice(0, 20))
-    console.log('[CacheTracer] Stored trace in-memory (deploymentId:', DEPLOYMENT_ID, ') route:', routeKey, '| ops:', ops.length)
+    localTraceByRouteLatest.set(route, storedTrace)
+    localTraceById.set(storedTrace.requestId, storedTrace)
+    const recent = localRecentIds.get(route) || []
+    recent.unshift(storedTrace.requestId)
+    localRecentIds.set(route, recent.slice(0, 20))
+    console.log(
+      `[CacheTracer] Stored in-memory | deploy:${DEPLOYMENT_ID} | route:${route} | ops:${operations.length}`
+    )
   }
 
   return storedTrace

@@ -9,7 +9,7 @@ import { CacheStatusSection } from './components/cache-status-section'
 import { CacheInspectorDashboard } from './components/cache-inspector-dashboard'
 import { RequestTraceSection } from './components/request-trace-section'
 import { StoredTracesViewer } from './components/stored-traces-viewer'
-import { resetTrace, finalizeAndStoreTrace } from '@/lib/cache-tracer'
+import { finalizeAndStoreTrace } from '@/lib/cache-tracer'
 import {
   ProductListSkeleton,
   ProductStatsSkeleton,
@@ -40,13 +40,20 @@ async function TraceSetup({ route }: { route: string }) {
   // Opt into dynamic (request-time) rendering — required so PPR does not
   // pre-bake this component at build time.
   await connection()
-  resetTrace(route)
+
+  // Capture the request start time NOW — after connection() ensures we are
+  // in a real request context, before any sibling "use cache" bodies execute.
+  // This timestamp is the left boundary for the ring buffer claim window.
+  const requestStartTime = Date.now()
+
   after(async () => {
-    const storedTrace = await finalizeAndStoreTrace()
+    const storedTrace = await finalizeAndStoreTrace(requestStartTime, route)
     if (storedTrace) {
       console.log(
-        `[CacheTracer] Route: ${storedTrace.route} | deploymentId: ${storedTrace.deploymentId} | ` +
-        `${storedTrace.summary.totalOps} cache ops | ${storedTrace.totalDuration}ms total`
+        `[CacheTracer] Stored | route:${storedTrace.route} | ` +
+        `deploy:${storedTrace.deploymentId} | ` +
+        `ops:${storedTrace.summary.totalOps} | ` +
+        `${storedTrace.totalDuration}ms`
       )
     }
   })
