@@ -7,44 +7,49 @@ import { revalidateTag } from 'next/cache'
  * Uses the 'max' cacheLife profile for SWR behavior
  */
 export async function revalidateAllProducts() {
-  console.log('[Action] Revalidating all products...')
+  console.log('[v0] revalidateAllProducts called - invalidating tag: products')
   revalidateTag('products', 'max')
-  return { success: true, message: 'All products cache invalidated', timestamp: new Date().toISOString() }
+  console.log('[v0] revalidateTag completed for products')
+  return { success: true, message: 'All products cache invalidated' }
 }
 
 /**
  * Server Action to revalidate a specific product
  */
 export async function revalidateProduct(productId: string) {
-  console.log(`[Action] Revalidating product ${productId}...`)
+  console.log(`[v0] revalidateProduct called - invalidating tag: product-${productId}`)
   revalidateTag(`product-${productId}`, 'max')
-  return { success: true, message: `Product ${productId} cache invalidated`, timestamp: new Date().toISOString() }
+  console.log(`[v0] revalidateTag completed for product-${productId}`)
+  return { success: true, message: `Product ${productId} cache invalidated` }
 }
 
 /**
  * Server Action to revalidate a category
  */
 export async function revalidateCategory(category: string) {
-  console.log(`[Action] Revalidating category ${category}...`)
+  console.log(`[v0] revalidateCategory called - invalidating tag: category-${category}`)
   revalidateTag(`category-${category}`, 'max')
-  return { success: true, message: `Category ${category} cache invalidated`, timestamp: new Date().toISOString() }
+  console.log(`[v0] revalidateTag completed for category-${category}`)
+  return { success: true, message: `Category ${category} cache invalidated` }
 }
 
 /**
  * Server Action to revalidate product statistics
  */
 export async function revalidateStats() {
-  console.log('[Action] Revalidating product stats...')
+  console.log('[v0] revalidateStats called - invalidating tag: products-stats')
   revalidateTag('products-stats', 'max')
-  return { success: true, message: 'Product stats cache invalidated', timestamp: new Date().toISOString() }
+  console.log('[v0] revalidateTag completed for products-stats')
+  return { success: true, message: 'Product stats cache invalidated' }
 }
 
 /**
  * Server Action to revalidate everything
  */
 export async function revalidateEverything() {
-  console.log('[Action] Revalidating everything...')
+  console.log('[v0] revalidateEverything called - invalidating tags: products, products-stats')
   revalidateTag('products', 'max')
   revalidateTag('products-stats', 'max')
-  return { success: true, message: 'All caches invalidated', timestamp: new Date().toISOString() }
+  console.log('[v0] revalidateTag completed for all tags')
+  return { success: true, message: 'All caches invalidated' }
 }

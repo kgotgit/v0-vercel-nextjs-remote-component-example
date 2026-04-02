@@ -1,5 +1,12 @@
 import { cacheTag } from 'next/cache'
 
+// Helper to generate a random fetch ID - this changes each time the function actually runs
+// When you see the same fetchId, the data was served from cache
+// When fetchId changes after revalidation, fresh data was fetched
+function generateFetchId() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase()
+}
+
 // Simulated product data - in production this would be a database or API call
 const PRODUCTS_DB = [
   { id: '1', name: 'Wireless Headphones', price: 149.99, category: 'electronics', stock: 25 },
@@ -17,14 +24,19 @@ export type Product = typeof PRODUCTS_DB[number]
  * The "use cache" directive makes this function's result cacheable
  * cacheTag() assigns a tag that can be used with revalidateTag() to invalidate
  */
-export async function getProducts(): Promise<Product[]> {
+export async function getProducts() {
   "use cache"
   cacheTag('products')
   
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 500))
+  // Simulate network delay (longer to show Suspense fallback on cache miss)
+  await new Promise(resolve => setTimeout(resolve, 1500))
   
-  return PRODUCTS_DB
+  const fetchId = generateFetchId()
+  return { 
+    products: PRODUCTS_DB, 
+    fetchId,
+    tag: 'products' 
+  }
 }
 
 /**
@@ -46,15 +58,19 @@ export async function getProduct(id: string): Promise<Product | undefined> {
  * Cached function to fetch products by category
  * Tagged with 'products' and 'category-{category}'
  */
-export async function getProductsByCategory(category: string): Promise<Product[]> {
+export async function getProductsByCategory(category: string) {
   "use cache"
   cacheTag('products', `category-${category}`)
   
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 400))
+  // Simulate network delay (longer to show Suspense fallback on cache miss)
+  await new Promise(resolve => setTimeout(resolve, 1200))
   
-
-  return PRODUCTS_DB.filter(p => p.category === category)
+  const fetchId = generateFetchId()
+  return { 
+    products: PRODUCTS_DB.filter(p => p.category === category),
+    fetchId,
+    tag: `category-${category}`
+  }
 }
 
 /**
@@ -65,8 +81,8 @@ export async function getProductStats() {
   "use cache"
   cacheTag('products-stats')
   
-  // Simulate expensive computation
-  await new Promise(resolve => setTimeout(resolve, 800))
+  // Simulate expensive computation (longer to show Suspense fallback on cache miss)
+  await new Promise(resolve => setTimeout(resolve, 2000))
   
 
   
@@ -75,11 +91,13 @@ export async function getProductStats() {
   const avgPrice = PRODUCTS_DB.reduce((sum, p) => sum + p.price, 0) / totalProducts
   const categories = [...new Set(PRODUCTS_DB.map(p => p.category))]
   
+  const fetchId = generateFetchId()
   return {
     totalProducts,
     totalStock,
     avgPrice: avgPrice.toFixed(2),
     categories,
-    lastUpdated: new Date().toISOString(),
+    fetchId,
+    tag: 'products-stats'
   }
 }
