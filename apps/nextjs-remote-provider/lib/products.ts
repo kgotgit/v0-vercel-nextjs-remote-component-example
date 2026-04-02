@@ -1,4 +1,5 @@
 import { cacheTag } from 'next/cache'
+import { registerCacheEntry } from './cache-registry'
 
 // Helper to generate a random fetch ID - this changes each time the function actually runs
 // When you see the same fetchId, the data was served from cache
@@ -32,11 +33,16 @@ export async function getProducts() {
   await new Promise(resolve => setTimeout(resolve, 1500))
   
   const fetchId = generateFetchId()
-  return { 
+  const result = { 
     products: PRODUCTS_DB, 
     fetchId,
     tag: 'products' 
   }
+  
+  // Register in shadow cache for inspection
+  registerCacheEntry('products', result, fetchId)
+  
+  return result
 }
 
 /**
@@ -66,11 +72,17 @@ export async function getProductsByCategory(category: string) {
   await new Promise(resolve => setTimeout(resolve, 1200))
   
   const fetchId = generateFetchId()
-  return { 
+  const tag = `category-${category}`
+  const result = { 
     products: PRODUCTS_DB.filter(p => p.category === category),
     fetchId,
-    tag: `category-${category}`
+    tag
   }
+  
+  // Register in shadow cache for inspection
+  registerCacheEntry(tag, result, fetchId)
+  
+  return result
 }
 
 /**
@@ -92,7 +104,7 @@ export async function getProductStats() {
   const categories = [...new Set(PRODUCTS_DB.map(p => p.category))]
   
   const fetchId = generateFetchId()
-  return {
+  const result = {
     totalProducts,
     totalStock,
     avgPrice: avgPrice.toFixed(2),
@@ -100,4 +112,9 @@ export async function getProductStats() {
     fetchId,
     tag: 'products-stats'
   }
+  
+  // Register in shadow cache for inspection
+  registerCacheEntry('products-stats', result, fetchId)
+  
+  return result
 }
