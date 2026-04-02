@@ -80,6 +80,7 @@ export async function getProductStats() {
     totalStock,
     avgPrice: avgPrice.toFixed(2),
     categories,
-    lastUpdated: new Date().toISOString(),
+    // Note: Can't use new Date() in cached function before accessing dynamic data
+    // The cache timestamp is managed by Next.js cache system
   }
 }

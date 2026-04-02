@@ -37,9 +37,6 @@ export async function ProductStats() {
         <p className="text-xs text-blue-600">
           Cache Tag: <code className="bg-blue-100 px-1 rounded">products-stats</code>
         </p>
-        <p className="text-xs text-blue-500 mt-1">
-          Last computed: {stats.lastUpdated}
-        </p>
       </div>
     </div>
   )
