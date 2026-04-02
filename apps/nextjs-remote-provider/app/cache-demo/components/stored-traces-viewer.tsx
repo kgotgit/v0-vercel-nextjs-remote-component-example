@@ -14,6 +14,7 @@ type TraceOperation = {
 type StoredTrace = {
   requestId: string
   route: string
+  deploymentId: string
   startTime: number
   totalDuration: number
   operations: TraceOperation[]
@@ -122,6 +123,9 @@ export function StoredTracesViewer() {
           </span>
         </div>
         <div className="flex items-center gap-4">
+          <span className="text-slate-500 text-xs font-mono" title="Deployment that produced this trace">
+            deploy:{trace.deploymentId}
+          </span>
           <span className="text-slate-400 text-xs">
             {trace.summary.totalOps} ops | {formatTime(trace.totalDuration)} total
           </span>
