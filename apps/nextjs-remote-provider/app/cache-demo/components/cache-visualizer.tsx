@@ -31,14 +31,10 @@ export function CacheVisualizer({ entries }: CacheVisualizerProps) {
     const prevIds: Record<string, string> = stored ? JSON.parse(stored) : {}
     setPreviousIds(prevIds)
     
-    console.log('[v0] CacheVisualizer - Previous IDs from session:', prevIds)
-    console.log('[v0] CacheVisualizer - Current entries:', entries)
-    
     // Check each entry against previous values
     const now = Date.now()
     const newHistory: CacheEntry[] = entries.map(entry => {
       const isNew = prevIds[entry.tag] !== entry.fetchId
-      console.log(`[v0] ${entry.tag}: prev=${prevIds[entry.tag]} current=${entry.fetchId} isNew=${isNew}`)
       return {
         tag: entry.tag,
         fetchId: entry.fetchId,
@@ -53,7 +49,6 @@ export function CacheVisualizer({ entries }: CacheVisualizerProps) {
     const currentIds: Record<string, string> = {}
     entries.forEach(e => { currentIds[e.tag] = e.fetchId })
     sessionStorage.setItem('cache-demo-ids', JSON.stringify(currentIds))
-    console.log('[v0] CacheVisualizer - Saved to session:', currentIds)
   }, [entries])
   
   const allCached = history.every(h => !h.isNew)

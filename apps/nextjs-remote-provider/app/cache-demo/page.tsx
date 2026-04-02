@@ -8,7 +8,7 @@ import { RevalidateButtons } from './components/revalidate-buttons'
 import { CacheStatusSection } from './components/cache-status-section'
 import { CacheInspectorDashboard } from './components/cache-inspector-dashboard'
 import { RequestTraceSection } from './components/request-trace-section'
-import { resetCacheTrace, storeCurrentTrace, getCacheTrace } from '@/lib/cache-tracer'
+import { resetTrace, finalizeAndStoreTrace } from '@/lib/cache-tracer'
 import {
   ProductListSkeleton,
   ProductStatsSkeleton,
@@ -37,9 +37,21 @@ import {
  * - Tags assigned via cacheTag() in cached functions
  */
 export default function CacheDemoPage() {
-  // Reset the cache trace at the start of each request
-  // This ensures we capture all cache operations during this render
-  resetCacheTrace()
+  // Initialize trace at the start of this request
+  resetTrace('/cache-demo')
+  
+  // Schedule trace storage to run after response is sent
+  // This runs after all Suspense boundaries have resolved
+  after(async () => {
+    const storedTrace = await finalizeAndStoreTrace()
+    if (storedTrace) {
+      console.log(
+        `[CacheTracer] Route: ${storedTrace.route} | ` +
+        `${storedTrace.summary.totalOps} cache ops | ` +
+        `${storedTrace.totalDuration}ms total`
+      )
+    }
+  })
   
   return (
     <div className="space-y-8">

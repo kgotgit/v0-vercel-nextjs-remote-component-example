@@ -1,20 +1,35 @@
-import { getCacheTrace, formatTraceAsJson } from '@/lib/cache-tracer'
+import { getCurrentTrace } from '@/lib/cache-tracer'
 import { CacheTraceViewer } from './cache-trace-viewer'
 
 /**
- * Server component that collects the current request's cache trace
- * and passes it to the client viewer.
+ * Server component that displays the current request's cache trace.
  * 
- * This component should be rendered AFTER all cached components
- * so the trace includes all operations from this request.
+ * The trace is built during render as each "use cache" function executes.
+ * This component reads the current trace state and passes it to the viewer.
+ * 
+ * Note: The trace only captures cache MISSES. If all data is cached,
+ * the trace will show 0 operations.
  */
 export function RequestTraceSection() {
-  // Get the trace that was built during this request
-  // This includes all cache operations that ran (cache misses only)
-  const trace = getCacheTrace()
-  const traceData = formatTraceAsJson(trace)
+  // Get the current trace that was built during this request
+  const trace = getCurrentTrace()
   
-  console.log('[v0] RequestTraceSection - trace:', trace ? `${trace.operations.length} ops` : 'null')
+  // Format for the viewer
+  const traceData = trace ? {
+    requestId: trace.requestId,
+    route: trace.route,
+    totalDuration: Date.now() - trace.startTime,
+    operationCount: trace.operations.length,
+    allCached: trace.operations.length === 0,
+    operations: trace.operations.map(op => ({
+      tag: op.tag,
+      fetchId: op.fetchId,
+      startedAt: op.startedAt,
+      completedAt: op.completedAt,
+      duration: op.duration,
+      size: op.size,
+    })),
+  } : null
   
   return (
     <div className="space-y-4">
@@ -22,11 +37,11 @@ export function RequestTraceSection() {
         <h2 className="font-semibold text-gray-900">Request Cache Trace</h2>
         <p className="text-sm text-gray-500">
           Real-time trace of cache operations during this request. 
-          Only shows operations that actually ran (cache misses).
+          Only shows cache MISSES (when &quot;use cache&quot; functions actually execute).
           If empty, all data was served from cache.
         </p>
       </div>
-      <CacheTraceViewer traceData={traceData as any} />
+      <CacheTraceViewer traceData={traceData} />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { cacheTag } from 'next/cache'
 import { registerCacheEntry } from './cache-registry'
-import { traceCacheOperation } from './cache-tracer'
+import { recordCacheOp } from './cache-tracer'
 
 // Helper to generate a random fetch ID - this changes each time the function actually runs
 // When you see the same fetchId, the data was served from cache
@@ -45,9 +45,9 @@ export async function getProducts() {
   // Register in shadow cache for inspection
   registerCacheEntry('products', result, fetchId)
   
-  // Trace this cache operation for request-scoped debugging
+  // Record this cache operation for request tracing
   const size = new Blob([JSON.stringify(result)]).size
-  traceCacheOperation('products', fetchId, startTime, size)
+  recordCacheOp('products', fetchId, startTime, size)
   
   return result
 }
@@ -91,9 +91,9 @@ export async function getProductsByCategory(category: string) {
   // Register in shadow cache for inspection
   registerCacheEntry(tag, result, fetchId)
   
-  // Trace this cache operation
+  // Record this cache operation for request tracing
   const size = new Blob([JSON.stringify(result)]).size
-  traceCacheOperation(tag, fetchId, startTime, size)
+  recordCacheOp(tag, fetchId, startTime, size)
   
   return result
 }
@@ -129,9 +129,9 @@ export async function getProductStats() {
   // Register in shadow cache for inspection
   registerCacheEntry('products-stats', result, fetchId)
   
-  // Trace this cache operation
+  // Record this cache operation for request tracing
   const size = new Blob([JSON.stringify(result)]).size
-  traceCacheOperation('products-stats', fetchId, startTime, size)
+  recordCacheOp('products-stats', fetchId, startTime, size)
   
   return result
 }

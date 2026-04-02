@@ -1,57 +1,71 @@
 /**
- * Request-Scoped Cache Tracer with after() persistence
+ * Request-Scoped Cache Tracer with Runtime Cache persistence
  * 
  * Architecture:
- * 1. Request arrives → Page.tsx calls resetCacheTrace()
- * 2. Each "use cache" function calls traceCacheOperation() on cache MISS
- * 3. After response sent → after() stores trace to persistent store
- * 4. API route can query stored traces for visualization
+ * 1. Request arrives → resetTrace('/route') initializes trace
+ * 2. Suspense components render concurrently
+ * 3. Each "use cache" function calls recordCacheOp() on cache MISS
+ * 4. Response streams to client (all Suspense boundaries resolve)
+ * 5. after() runs → finalizeAndStoreTrace() persists to Runtime Cache
+ * 6. API route queries stored traces for visualization
  * 
- * The trace only captures cache MISSES because "use cache" functions
- * don't execute their body when serving from cache.
+ * Key insight: Only cache MISSES are traced because "use cache" 
+ * functions don't execute their body when serving from cache.
  */
+
+import { getCache } from '@vercel/functions'
+
+// ============================================================================
+// Types
+// ============================================================================
 
 export type CacheOperation = {
   tag: string
   fetchId: string
-  timestamp: number
-  duration: number
-  size: number
-  source: 'cache-miss'
+  startedAt: number      // Relative to request start (ms)
+  completedAt: number    // Relative to request start (ms)
+  duration: number       // How long the fetch took (ms)
+  size: number           // Response size in bytes
 }
 
 export type CacheTrace = {
   requestId: string
   route: string
-  startTime: number
-  endTime?: number
+  startTime: number      // Absolute timestamp
   operations: CacheOperation[]
 }
 
 export type StoredTrace = CacheTrace & {
-  storedAt: number
+  endTime: number
+  totalDuration: number
+  summary: {
+    totalOps: number
+    totalFetchTime: number
+    totalSize: number
+    tags: string[]
+    parallelSavings: number  // Time saved by parallel execution
+  }
 }
 
-// Module-level trace for current request
+// ============================================================================
+// Module-level state for current request
+// ============================================================================
+
 let currentTrace: CacheTrace | null = null
 
-// In-memory store for traces (for demo - use Redis/KV in production)
-// This persists across requests in the same serverless instance
-const traceStore = new Map<string, StoredTrace>()
-const MAX_STORED_TRACES = 50
-
-/**
- * Generate a unique request ID
- */
 function generateRequestId(): string {
   return `req_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`
 }
 
+// ============================================================================
+// Trace Collection API (called during render)
+// ============================================================================
+
 /**
- * Reset/start a new cache trace for this request
- * Call at the beginning of page render
+ * Initialize a new trace for this request
+ * Call at the start of page render
  */
-export function resetCacheTrace(route: string = '/unknown'): CacheTrace {
+export function resetTrace(route: string): CacheTrace {
   currentTrace = {
     requestId: generateRequestId(),
     route,
@@ -62,138 +76,195 @@ export function resetCacheTrace(route: string = '/unknown'): CacheTrace {
 }
 
 /**
- * Record a cache operation in the current trace
- * Call inside each "use cache" function (only runs on cache MISS)
+ * Record a cache operation (called inside "use cache" functions)
+ * Only executes on cache MISS when the function body runs
  */
-export function traceCacheOperation(
+export function recordCacheOp(
   tag: string,
   fetchId: string,
-  startTime: number,
-  dataSize: number
+  opStartTime: number,
+  size: number
 ): void {
   if (!currentTrace) {
-    resetCacheTrace()
+    // Auto-initialize if not started (shouldn't happen in normal flow)
+    resetTrace('/unknown')
   }
-
+  
+  const now = Date.now()
   const operation: CacheOperation = {
     tag,
     fetchId,
-    timestamp: startTime,
-    duration: Date.now() - startTime,
-    size: dataSize,
-    source: 'cache-miss',
+    startedAt: opStartTime - currentTrace!.startTime,
+    completedAt: now - currentTrace!.startTime,
+    duration: now - opStartTime,
+    size,
   }
-
+  
   currentTrace!.operations.push(operation)
 }
 
 /**
- * Get the current trace (for reading during render)
+ * Get current trace (for passing to components if needed)
  */
-export function getCacheTrace(): CacheTrace | null {
+export function getCurrentTrace(): CacheTrace | null {
   return currentTrace
 }
 
+// ============================================================================
+// Trace Storage API (called in after())
+// ============================================================================
+
 /**
- * Finalize and store the trace
- * Call this inside after() to persist the trace post-response
+ * Finalize the trace and store it to Runtime Cache
+ * Call this inside after() to persist post-response
  */
-export function storeCurrentTrace(): StoredTrace | null {
+export async function finalizeAndStoreTrace(): Promise<StoredTrace | null> {
   if (!currentTrace) return null
+  
+  const endTime = Date.now()
+  const totalDuration = endTime - currentTrace.startTime
+  
+  // Calculate summary
+  const ops = currentTrace.operations
+  const totalFetchTime = ops.reduce((sum, op) => sum + op.duration, 0)
+  const totalSize = ops.reduce((sum, op) => sum + op.size, 0)
+  const tags = [...new Set(ops.map(op => op.tag))]
+  
+  // Calculate time saved by parallel execution
+  // If sequential: totalFetchTime, if parallel: max(completedAt)
+  const maxCompletedAt = ops.length > 0 
+    ? Math.max(...ops.map(op => op.completedAt)) 
+    : 0
+  const parallelSavings = totalFetchTime - maxCompletedAt
   
   const storedTrace: StoredTrace = {
     ...currentTrace,
-    endTime: Date.now(),
-    storedAt: Date.now(),
+    endTime,
+    totalDuration,
+    summary: {
+      totalOps: ops.length,
+      totalFetchTime,
+      totalSize,
+      tags,
+      parallelSavings: Math.max(0, parallelSavings),
+    },
   }
   
-  // Store with requestId as key
-  traceStore.set(currentTrace.requestId, storedTrace)
-  
-  // Prune old traces if over limit
-  if (traceStore.size > MAX_STORED_TRACES) {
-    const oldest = [...traceStore.entries()]
-      .sort((a, b) => a[1].storedAt - b[1].storedAt)[0]
-    if (oldest) traceStore.delete(oldest[0])
+  // Store to Runtime Cache
+  try {
+    const cache = getCache()
+    
+    // Store the trace with route-based key
+    await cache.set(`trace:${currentTrace.route}:latest`, storedTrace, {
+      ttl: 3600, // 1 hour
+      tags: ['cache-traces', `trace:${currentTrace.route}`],
+    })
+    
+    // Also store by requestId for direct lookup
+    await cache.set(`trace:id:${currentTrace.requestId}`, storedTrace, {
+      ttl: 3600,
+      tags: ['cache-traces'],
+    })
+    
+    // Update list of recent trace IDs for this route
+    const recentKey = `traces:recent:${currentTrace.route}`
+    const existing = await cache.get(recentKey) as string[] | null
+    const recentIds = existing || []
+    recentIds.unshift(currentTrace.requestId)
+    await cache.set(recentKey, recentIds.slice(0, 20), {
+      ttl: 3600,
+      tags: ['cache-traces'],
+    })
+    
+  } catch (error) {
+    // Runtime Cache might not be available in all environments
+    console.error('[CacheTracer] Failed to store trace:', error)
   }
   
   return storedTrace
 }
 
-/**
- * Get a stored trace by requestId
- */
-export function getStoredTrace(requestId: string): StoredTrace | undefined {
-  return traceStore.get(requestId)
-}
+// ============================================================================
+// Trace Query API (called from API routes or components)
+// ============================================================================
 
 /**
- * Get all stored traces (most recent first)
+ * Get the latest trace for a route
  */
-export function getAllStoredTraces(): StoredTrace[] {
-  return [...traceStore.values()].sort((a, b) => b.storedAt - a.storedAt)
-}
-
-/**
- * Get recent traces for a specific route
- */
-export function getTracesByRoute(route: string, limit: number = 10): StoredTrace[] {
-  return getAllStoredTraces()
-    .filter(t => t.route === route)
-    .slice(0, limit)
-}
-
-/**
- * Clear all stored traces
- */
-export function clearAllTraces(): void {
-  traceStore.clear()
-}
-
-/**
- * Format trace for display
- */
-export function formatTraceAsJson(trace: CacheTrace | null): object | null {
-  if (!trace) return null
-  
-  const totalDuration = (trace.endTime || Date.now()) - trace.startTime
-  
-  return {
-    requestId: trace.requestId,
-    route: trace.route,
-    totalDuration,
-    operationCount: trace.operations.length,
-    allCached: trace.operations.length === 0,
-    operations: trace.operations.map(op => ({
-      tag: op.tag,
-      fetchId: op.fetchId,
-      duration: op.duration,
-      size: op.size,
-      source: op.source,
-    })),
-    summary: {
-      tags: [...new Set(trace.operations.map(op => op.tag))],
-      totalSize: trace.operations.reduce((sum, op) => sum + op.size, 0),
-      totalFetchTime: trace.operations.reduce((sum, op) => sum + op.duration, 0),
-    },
+export async function getLatestTraceForRoute(route: string): Promise<StoredTrace | null> {
+  try {
+    const cache = getCache()
+    return await cache.get(`trace:${route}:latest`) as StoredTrace | null
+  } catch {
+    return null
   }
 }
 
 /**
- * Get trace store stats
+ * Get a trace by requestId
  */
-export function getTraceStoreStats() {
-  const traces = getAllStoredTraces()
-  const totalOps = traces.reduce((sum, t) => sum + t.operations.length, 0)
-  const cachedRequests = traces.filter(t => t.operations.length === 0).length
+export async function getTraceById(requestId: string): Promise<StoredTrace | null> {
+  try {
+    const cache = getCache()
+    return await cache.get(`trace:id:${requestId}`) as StoredTrace | null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Get recent trace IDs for a route
+ */
+export async function getRecentTraceIds(route: string): Promise<string[]> {
+  try {
+    const cache = getCache()
+    const ids = await cache.get(`traces:recent:${route}`) as string[] | null
+    return ids || []
+  } catch {
+    return []
+  }
+}
+
+// ============================================================================
+// Formatting utilities
+// ============================================================================
+
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+}
+
+export function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(2)}s`
+}
+
+/**
+ * Format trace for JSON response
+ */
+export function formatTraceForApi(trace: StoredTrace | null) {
+  if (!trace) return null
   
   return {
-    totalTraces: traces.length,
-    totalOperations: totalOps,
-    cachedRequests,
-    cacheHitRate: traces.length > 0 
-      ? `${((cachedRequests / traces.length) * 100).toFixed(1)}%` 
-      : '0%',
-    routes: [...new Set(traces.map(t => t.route))],
+    requestId: trace.requestId,
+    route: trace.route,
+    totalDuration: formatDuration(trace.totalDuration),
+    allCached: trace.operations.length === 0,
+    operations: trace.operations.map(op => ({
+      tag: op.tag,
+      fetchId: op.fetchId,
+      timeline: `${op.startedAt}ms → ${op.completedAt}ms`,
+      duration: formatDuration(op.duration),
+      size: formatBytes(op.size),
+    })),
+    summary: {
+      ...trace.summary,
+      totalFetchTime: formatDuration(trace.summary.totalFetchTime),
+      totalSize: formatBytes(trace.summary.totalSize),
+      parallelSavings: formatDuration(trace.summary.parallelSavings),
+    },
   }
 }
