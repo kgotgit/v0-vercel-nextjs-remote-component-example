@@ -21,8 +21,8 @@ export async function getProducts(): Promise<Product[]> {
   "use cache"
   cacheTag('products')
   
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 500))
+  // Simulate network delay (longer to show Suspense fallback on cache miss)
+  await new Promise(resolve => setTimeout(resolve, 1500))
   
   return PRODUCTS_DB
 }
@@ -50,8 +50,8 @@ export async function getProductsByCategory(category: string): Promise<Product[]
   "use cache"
   cacheTag('products', `category-${category}`)
   
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 400))
+  // Simulate network delay (longer to show Suspense fallback on cache miss)
+  await new Promise(resolve => setTimeout(resolve, 1200))
   
 
   return PRODUCTS_DB.filter(p => p.category === category)
@@ -65,8 +65,8 @@ export async function getProductStats() {
   "use cache"
   cacheTag('products-stats')
   
-  // Simulate expensive computation
-  await new Promise(resolve => setTimeout(resolve, 800))
+  // Simulate expensive computation (longer to show Suspense fallback on cache miss)
+  await new Promise(resolve => setTimeout(resolve, 2000))
   
 
   

@@ -14,8 +14,8 @@ export async function DynamicUserInfo() {
   const userAgent = headersList.get('user-agent') || 'Unknown'
   const timestamp = new Date().toISOString()
   
-  // Simulate some async work
-  await new Promise(resolve => setTimeout(resolve, 200))
+  // Simulate async work (always runs since this is NOT cached - demonstrates PPR streaming)
+  await new Promise(resolve => setTimeout(resolve, 800))
   
   // Parse user agent for display
   const browser = userAgent.includes('Chrome') ? 'Chrome' :
