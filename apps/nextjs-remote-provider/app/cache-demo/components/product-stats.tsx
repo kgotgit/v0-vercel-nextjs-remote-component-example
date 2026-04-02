@@ -12,7 +12,20 @@ export async function ProductStats() {
   
   return (
     <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100 p-6">
-      <h3 className="font-semibold text-blue-900 mb-4">Product Statistics (Cached)</h3>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="font-semibold text-blue-900">Product Statistics (Cached)</h3>
+          <p className="text-xs text-blue-600">
+            Tag: <code className="bg-blue-100 px-1 rounded">{stats.tag}</code>
+          </p>
+        </div>
+        <div className="text-right">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-blue-100 text-blue-800">
+            ID: {stats.fetchId}
+          </span>
+          <p className="text-xs text-blue-400 mt-1">Same ID = cached</p>
+        </div>
+      </div>
       
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-white rounded-lg p-4 shadow-sm">
@@ -31,12 +44,6 @@ export async function ProductStats() {
           <p className="text-2xl font-bold text-gray-900">{stats.categories.length}</p>
           <p className="text-sm text-gray-500">Categories</p>
         </div>
-      </div>
-      
-      <div className="mt-4 pt-4 border-t border-blue-200">
-        <p className="text-xs text-blue-600">
-          Cache Tag: <code className="bg-blue-100 px-1 rounded">products-stats</code>
-        </p>
       </div>
     </div>
   )

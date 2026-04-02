@@ -1,5 +1,4 @@
 import { getProducts } from '@/lib/products'
-import { RenderedAt } from './rendered-at'
 
 /**
  * ProductList - Server Component that displays products
@@ -11,15 +10,25 @@ import { RenderedAt } from './rendered-at'
  * - Multiple components can share the same cached data
  */
 export async function ProductList() {
-  const products = await getProducts()
+  const { products, fetchId, tag } = await getProducts()
   
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-        <h2 className="font-semibold text-gray-900">Product List (Cached Component)</h2>
-        <p className="text-xs text-gray-500 mt-1">
-          This component uses &quot;use cache&quot; directive - cached until invalidated
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-gray-900">Product List (Cached)</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Tag: <code className="bg-gray-200 px-1 rounded">{tag}</code>
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-emerald-100 text-emerald-800">
+              ID: {fetchId}
+            </span>
+            <p className="text-xs text-gray-400 mt-1">Same ID = cached</p>
+          </div>
+        </div>
       </div>
       <div className="divide-y divide-gray-100">
         {products.map((product) => (
@@ -34,11 +43,6 @@ export async function ProductList() {
             </div>
           </div>
         ))}
-      </div>
-      <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
-        <p className="text-xs text-gray-500">
-          Rendered at: <RenderedAt />
-        </p>
       </div>
     </div>
   )
