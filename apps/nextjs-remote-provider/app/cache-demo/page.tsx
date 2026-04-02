@@ -37,9 +37,10 @@ import {
  * - 'max' is a cacheLife profile that enables SWR behavior
  * - Tags assigned via cacheTag() in cached functions
  */
-export default function CacheDemoPage() {
+export default async function CacheDemoPage() {
   // Initialize trace at the start of this request
-  resetTrace('/cache-demo')
+  // resetTrace is async because it calls headers() to opt into dynamic rendering
+  await resetTrace('/cache-demo')
   
   // Schedule trace storage to run after response is sent
   // This runs after all Suspense boundaries have resolved

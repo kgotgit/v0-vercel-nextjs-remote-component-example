@@ -14,6 +14,7 @@
  */
 
 import { getCache } from '@vercel/functions'
+import { headers } from 'next/headers'
 
 // ============================================================================
 // Types
@@ -64,8 +65,14 @@ function generateRequestId(): string {
 /**
  * Initialize a new trace for this request
  * Call at the start of page render
+ * 
+ * Uses headers() to opt into dynamic rendering, which allows Date.now()
  */
-export function resetTrace(route: string): CacheTrace {
+export async function resetTrace(route: string): Promise<CacheTrace> {
+  // Access headers to opt into dynamic rendering
+  // This allows us to use Date.now() without build errors
+  await headers()
+  
   currentTrace = {
     requestId: generateRequestId(),
     route,
