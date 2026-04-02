@@ -33,12 +33,15 @@ export function CacheVisualizer({ entries }: CacheVisualizerProps) {
     
     // Check each entry against previous values
     const now = Date.now()
-    const newHistory: CacheEntry[] = entries.map(entry => ({
-      tag: entry.tag,
-      fetchId: entry.fetchId,
-      timestamp: now,
-      isNew: prevIds[entry.tag] !== entry.fetchId
-    }))
+    const newHistory: CacheEntry[] = entries.map(entry => {
+      const isNew = prevIds[entry.tag] !== entry.fetchId
+      return {
+        tag: entry.tag,
+        fetchId: entry.fetchId,
+        timestamp: now,
+        isNew
+      }
+    })
     
     setHistory(newHistory)
     

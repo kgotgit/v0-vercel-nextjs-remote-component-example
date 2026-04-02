@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import { after } from 'next/server'
 import { ProductList } from './components/product-list'
 import { ProductStats } from './components/product-stats'
 import { CategoryProducts } from './components/category-products'
@@ -7,6 +8,8 @@ import { RevalidateButtons } from './components/revalidate-buttons'
 import { CacheStatusSection } from './components/cache-status-section'
 import { CacheInspectorDashboard } from './components/cache-inspector-dashboard'
 import { RequestTraceSection } from './components/request-trace-section'
+import { StoredTracesViewer } from './components/stored-traces-viewer'
+import { resetTrace, finalizeAndStoreTrace } from '@/lib/cache-tracer'
 import {
   ProductListSkeleton,
   ProductStatsSkeleton,
@@ -35,6 +38,23 @@ import {
  * - Tags assigned via cacheTag() in cached functions
  */
 export default function CacheDemoPage() {
+  // Mark the route for tracing - actual trace is initialized lazily
+  // when first cache operation runs (to avoid Date.now() during static render)
+  resetTrace('/cache-demo')
+  
+  // Schedule trace storage to run after response is sent
+  // This runs after all Suspense boundaries have resolved
+  after(async () => {
+    const storedTrace = await finalizeAndStoreTrace()
+    if (storedTrace) {
+      console.log(
+        `[CacheTracer] Route: ${storedTrace.route} | ` +
+        `${storedTrace.summary.totalOps} cache ops | ` +
+        `${storedTrace.totalDuration}ms total`
+      )
+    }
+  })
+  
   return (
     <div className="space-y-8">
       {/* Explanation Section */}
@@ -123,9 +143,23 @@ export default function CacheDemoPage() {
         </div>
       </section>
 
-      {/* Request Cache Trace - Per-request tracing */}
+      {/* Request Cache Trace - Current request's trace (in-memory) */}
       <section>
+        <h2 className="font-semibold text-gray-900 mb-2">Current Request Trace</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Shows cache operations that ran during THIS request (in-memory, before storage).
+        </p>
         <RequestTraceSection />
+      </section>
+
+      {/* Stored Trace - Fetched from Runtime Cache via API */}
+      <section>
+        <h2 className="font-semibold text-gray-900 mb-2">Stored Trace (Runtime Cache)</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          The previous request&apos;s trace stored via <code className="bg-gray-100 px-1 rounded">after()</code> hook 
+          to Vercel Runtime Cache. Refresh to see the current request&apos;s trace after it&apos;s stored.
+        </p>
+        <StoredTracesViewer />
       </section>
 
       {/* Cache Inspector Dashboard - Shadow Cache Visualization */}

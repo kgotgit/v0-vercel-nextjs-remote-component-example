@@ -1,181 +1,288 @@
-import { AsyncLocalStorage } from 'async_hooks'
-
 /**
- * Request-Scoped Cache Tracer
+ * Request-Scoped Cache Tracer with Runtime Cache persistence
  * 
- * Uses AsyncLocalStorage to trace cache operations within a single request.
- * Each request gets its own trace context that collects all cache hits/fetches.
+ * Architecture:
+ * 1. Request arrives → resetTrace('/route') initializes trace
+ * 2. Suspense components render concurrently
+ * 3. Each "use cache" function calls recordCacheOp() on cache MISS
+ * 4. Response streams to client (all Suspense boundaries resolve)
+ * 5. after() runs → finalizeAndStoreTrace() persists to Runtime Cache
+ * 6. API route queries stored traces for visualization
  * 
- * Flow:
- * 1. Middleware/layout calls startCacheTrace() at request start
- * 2. Each "use cache" function calls traceCacheOperation() when executing
- * 3. Before response, call getCacheTrace() to get all operations
- * 4. Optionally inject trace into response headers for debugging
+ * Key insight: Only cache MISSES are traced because "use cache" 
+ * functions don't execute their body when serving from cache.
  */
+
+import { getCache } from '@vercel/functions'
+
+// ============================================================================
+// Types
+// ============================================================================
 
 export type CacheOperation = {
   tag: string
   fetchId: string
-  timestamp: number
-  duration: number
-  size: number
-  source: 'cache-miss' | 'cache-hit-stale' | 'unknown'
+  startedAt: number      // Relative to request start (ms)
+  completedAt: number    // Relative to request start (ms)
+  duration: number       // How long the fetch took (ms)
+  size: number           // Response size in bytes
 }
 
 export type CacheTrace = {
   requestId: string
-  startTime: number
+  route: string
+  startTime: number      // Absolute timestamp
   operations: CacheOperation[]
 }
 
-// AsyncLocalStorage provides request-scoped context
-const cacheTraceStorage = new AsyncLocalStorage<CacheTrace>()
-
-/**
- * Generate a unique request ID
- */
-function generateRequestId(): string {
-  return `req_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`
-}
-
-/**
- * Start a new cache trace for this request
- * Call this at the beginning of request handling (middleware/layout)
- */
-export function startCacheTrace(): CacheTrace {
-  const trace: CacheTrace = {
-    requestId: generateRequestId(),
-    startTime: Date.now(),
-    operations: [],
+export type StoredTrace = CacheTrace & {
+  endTime: number
+  totalDuration: number
+  summary: {
+    totalOps: number
+    totalFetchTime: number
+    totalSize: number
+    tags: string[]
+    parallelSavings: number  // Time saved by parallel execution
   }
-  return trace
+}
+
+// ============================================================================
+// Module-level state for current request
+// ============================================================================
+
+let currentTrace: CacheTrace | null = null
+let pendingRoute: string | null = null
+
+function generateRequestId(): string {
+  // Use random only - timestamp will be set when first op records
+  return `req_${Math.random().toString(36).substring(2, 10)}`
+}
+
+// ============================================================================
+// Trace Collection API (called during render)
+// ============================================================================
+
+/**
+ * Mark the route for tracing
+ * The actual trace is initialized lazily when first cache op runs
+ * This avoids Date.now() during static render
+ */
+export function resetTrace(route: string): void {
+  console.log('[v0] resetTrace called for route:', route)
+  pendingRoute = route
+  currentTrace = null
 }
 
 /**
- * Run a function within a cache trace context
+ * Initialize trace lazily (called from recordCacheOp)
+ * Uses the timestamp from the first cache operation
  */
-export function runWithCacheTrace<T>(fn: () => T): { result: T; trace: CacheTrace } {
-  const trace = startCacheTrace()
-  const result = cacheTraceStorage.run(trace, fn)
-  return { result, trace }
+function ensureTraceInitialized(timestamp: number): CacheTrace {
+  if (!currentTrace) {
+    currentTrace = {
+      requestId: generateRequestId(),
+      route: pendingRoute || '/unknown',
+      startTime: timestamp,
+      operations: [],
+    }
+    console.log('[v0] Trace initialized:', currentTrace.requestId, 'for route:', currentTrace.route)
+  }
+  return currentTrace
 }
 
 /**
- * Run an async function within a cache trace context
+ * Record a cache operation (called inside "use cache" functions)
+ * Only executes on cache MISS when the function body runs
+ * 
+ * Lazily initializes the trace using the first operation's timestamp
  */
-export async function runWithCacheTraceAsync<T>(
-  fn: () => Promise<T>
-): Promise<{ result: T; trace: CacheTrace }> {
-  const trace = startCacheTrace()
-  const result = await cacheTraceStorage.run(trace, fn)
-  return { result, trace }
-}
-
-/**
- * Record a cache operation in the current trace
- * Call this inside each "use cache" function
- */
-export function traceCacheOperation(
+export function recordCacheOp(
   tag: string,
   fetchId: string,
-  startTime: number,
-  dataSize: number
+  opStartTime: number,
+  size: number
 ): void {
-  const trace = cacheTraceStorage.getStore()
-  if (!trace) {
-    // No active trace context - running outside of traced request
-    console.warn(`[CacheTracer] No trace context for tag: ${tag}`)
-    return
-  }
-
+  // Lazily initialize trace with first operation's start time
+  const trace = ensureTraceInitialized(opStartTime)
+  
+  const now = Date.now()
   const operation: CacheOperation = {
     tag,
     fetchId,
-    timestamp: startTime,
-    duration: Date.now() - startTime,
-    size: dataSize,
-    // We can't know if it was a hit or miss from inside "use cache"
-    // The function only runs on cache miss
-    source: 'cache-miss',
+    startedAt: opStartTime - trace.startTime,
+    completedAt: now - trace.startTime,
+    duration: now - opStartTime,
+    size,
   }
-
+  
   trace.operations.push(operation)
+  console.log('[v0] recordCacheOp:', tag, 'fetchId:', fetchId, 'duration:', operation.duration, 'ms')
 }
 
 /**
- * Get the current cache trace
+ * Get current trace (for passing to components if needed)
  */
-export function getCacheTrace(): CacheTrace | undefined {
-  return cacheTraceStorage.getStore()
+export function getCurrentTrace(): CacheTrace | null {
+  console.log('[v0] getCurrentTrace called, trace:', currentTrace ? `${currentTrace.requestId} with ${currentTrace.operations.length} ops` : 'null')
+  return currentTrace
+}
+
+// ============================================================================
+// Trace Storage API (called in after())
+// ============================================================================
+
+/**
+ * Finalize the trace and store it to Runtime Cache
+ * Call this inside after() to persist post-response
+ */
+export async function finalizeAndStoreTrace(): Promise<StoredTrace | null> {
+  if (!currentTrace) return null
+  
+  const endTime = Date.now()
+  const totalDuration = endTime - currentTrace.startTime
+  
+  // Calculate summary
+  const ops = currentTrace.operations
+  const totalFetchTime = ops.reduce((sum, op) => sum + op.duration, 0)
+  const totalSize = ops.reduce((sum, op) => sum + op.size, 0)
+  const tags = [...new Set(ops.map(op => op.tag))]
+  
+  // Calculate time saved by parallel execution
+  // If sequential: totalFetchTime, if parallel: max(completedAt)
+  const maxCompletedAt = ops.length > 0 
+    ? Math.max(...ops.map(op => op.completedAt)) 
+    : 0
+  const parallelSavings = totalFetchTime - maxCompletedAt
+  
+  const storedTrace: StoredTrace = {
+    ...currentTrace,
+    endTime,
+    totalDuration,
+    summary: {
+      totalOps: ops.length,
+      totalFetchTime,
+      totalSize,
+      tags,
+      parallelSavings: Math.max(0, parallelSavings),
+    },
+  }
+  
+  // Store to Runtime Cache
+  try {
+    const cache = getCache()
+    
+    // Store the trace with route-based key
+    await cache.set(`trace:${currentTrace.route}:latest`, storedTrace, {
+      ttl: 3600, // 1 hour
+      tags: ['cache-traces', `trace:${currentTrace.route}`],
+    })
+    
+    // Also store by requestId for direct lookup
+    await cache.set(`trace:id:${currentTrace.requestId}`, storedTrace, {
+      ttl: 3600,
+      tags: ['cache-traces'],
+    })
+    
+    // Update list of recent trace IDs for this route
+    const recentKey = `traces:recent:${currentTrace.route}`
+    const existing = await cache.get(recentKey) as string[] | null
+    const recentIds = existing || []
+    recentIds.unshift(currentTrace.requestId)
+    await cache.set(recentKey, recentIds.slice(0, 20), {
+      ttl: 3600,
+      tags: ['cache-traces'],
+    })
+    
+  } catch (error) {
+    // Runtime Cache might not be available in all environments
+    console.error('[CacheTracer] Failed to store trace:', error)
+  }
+  
+  return storedTrace
+}
+
+// ============================================================================
+// Trace Query API (called from API routes or components)
+// ============================================================================
+
+/**
+ * Get the latest trace for a route
+ */
+export async function getLatestTraceForRoute(route: string): Promise<StoredTrace | null> {
+  try {
+    const cache = getCache()
+    return await cache.get(`trace:${route}:latest`) as StoredTrace | null
+  } catch {
+    return null
+  }
 }
 
 /**
- * Format trace for logging or headers
+ * Get a trace by requestId
  */
-export function formatTraceForHeader(trace: CacheTrace): string {
-  const ops = trace.operations.map(op => 
-    `${op.tag}:${op.fetchId}:${op.duration}ms`
-  ).join(',')
-  return `${trace.requestId};ops=${ops};total=${trace.operations.length}`
+export async function getTraceById(requestId: string): Promise<StoredTrace | null> {
+  try {
+    const cache = getCache()
+    return await cache.get(`trace:id:${requestId}`) as StoredTrace | null
+  } catch {
+    return null
+  }
 }
 
 /**
- * Format trace as JSON for debugging
+ * Get recent trace IDs for a route
  */
-export function formatTraceAsJson(trace: CacheTrace): object {
+export async function getRecentTraceIds(route: string): Promise<string[]> {
+  try {
+    const cache = getCache()
+    const ids = await cache.get(`traces:recent:${route}`) as string[] | null
+    return ids || []
+  } catch {
+    return []
+  }
+}
+
+// ============================================================================
+// Formatting utilities
+// ============================================================================
+
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+}
+
+export function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(2)}s`
+}
+
+/**
+ * Format trace for JSON response
+ */
+export function formatTraceForApi(trace: StoredTrace | null) {
+  if (!trace) return null
+  
   return {
     requestId: trace.requestId,
-    totalDuration: Date.now() - trace.startTime,
-    operationCount: trace.operations.length,
+    route: trace.route,
+    totalDuration: formatDuration(trace.totalDuration),
+    allCached: trace.operations.length === 0,
     operations: trace.operations.map(op => ({
       tag: op.tag,
       fetchId: op.fetchId,
-      duration: `${op.duration}ms`,
-      size: `${op.size} bytes`,
-      source: op.source,
+      timeline: `${op.startedAt}ms → ${op.completedAt}ms`,
+      duration: formatDuration(op.duration),
+      size: formatBytes(op.size),
     })),
     summary: {
-      tags: [...new Set(trace.operations.map(op => op.tag))],
-      totalSize: trace.operations.reduce((sum, op) => sum + op.size, 0),
-      totalFetchTime: trace.operations.reduce((sum, op) => sum + op.duration, 0),
+      ...trace.summary,
+      totalFetchTime: formatDuration(trace.summary.totalFetchTime),
+      totalSize: formatBytes(trace.summary.totalSize),
+      parallelSavings: formatDuration(trace.summary.parallelSavings),
     },
   }
-}
-
-/**
- * Higher-order function to wrap cached functions with tracing
- * 
- * Usage:
- * ```ts
- * async function _getProducts() {
- *   "use cache"
- *   cacheTag('products')
- *   // ... fetch logic
- * }
- * export const getProducts = withCacheTracing('products', _getProducts)
- * ```
- */
-export function withCacheTracing<T extends (...args: any[]) => Promise<any>>(
-  tag: string,
-  fn: T
-): T {
-  return (async (...args: Parameters<T>) => {
-    const startTime = Date.now()
-    const fetchId = Math.random().toString(36).substring(2, 8).toUpperCase()
-    
-    const result = await fn(...args)
-    
-    // Calculate size of result
-    const size = new Blob([JSON.stringify(result)]).size
-    
-    // Record in trace
-    traceCacheOperation(tag, fetchId, startTime, size)
-    
-    // Attach metadata to result if it's an object
-    if (result && typeof result === 'object') {
-      return { ...result, _trace: { tag, fetchId, duration: Date.now() - startTime } }
-    }
-    
-    return result
-  }) as T
 }
