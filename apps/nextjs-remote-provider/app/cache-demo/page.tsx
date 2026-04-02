@@ -147,9 +147,17 @@ export default function CacheDemoPage() {
       <section>
         <h2 className="font-semibold text-gray-900 mb-2">Current Request Trace</h2>
         <p className="text-sm text-gray-500 mb-4">
-          Shows cache operations that ran during THIS request (in-memory, before storage).
+          Shows ops recorded during THIS request. Displays <strong>0 ops</strong> when all data was 
+          served from cache. On a cache miss the ops appear here concurrently with the Suspense 
+          children — see the Stored Trace below for the complete ordered picture.
         </p>
-        <RequestTraceSection />
+        <Suspense fallback={
+          <div className="bg-slate-900 rounded-xl border border-slate-700 p-4 text-slate-400 text-sm animate-pulse">
+            Collecting trace…
+          </div>
+        }>
+          <RequestTraceSection />
+        </Suspense>
       </section>
 
       {/* Stored Trace - Fetched from Runtime Cache via API */}

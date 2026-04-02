@@ -11,9 +11,25 @@
  * 
  * Key insight: Only cache MISSES are traced because "use cache" 
  * functions don't execute their body when serving from cache.
+ * 
+ * PPR / AsyncLocalStorage note:
+ * With cacheComponents: true (PPR), the synchronous page shell is prerendered
+ * at build time while dynamic Suspense children stream per-request.
+ * AsyncLocalStorage scopes the currentTrace to the per-request async context
+ * so prerender and runtime don't bleed into each other.
  */
 
-import { getCache } from '@vercel/functions'
+import { AsyncLocalStorage } from 'async_hooks'
+
+// Try to import getCache - only available on Vercel infrastructure
+let getCache: (() => ReturnType<typeof import('@vercel/functions').getCache>) | null = null
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const vercelFunctions = require('@vercel/functions')
+  getCache = vercelFunctions.getCache
+} catch {
+  // @vercel/functions not available or getCache not accessible locally
+}
 
 // ============================================================================
 // Types
@@ -48,14 +64,52 @@ export type StoredTrace = CacheTrace & {
 }
 
 // ============================================================================
-// Module-level state for current request
+// Per-request storage via AsyncLocalStorage
+// Falls back to module-level state for non-async contexts (e.g., dev mode SSR)
 // ============================================================================
 
-let currentTrace: CacheTrace | null = null
-let pendingRoute: string | null = null
+type TraceContext = {
+  trace: CacheTrace | null
+  pendingRoute: string | null
+}
+
+const traceStorage = new AsyncLocalStorage<TraceContext>()
+
+// Module-level fallback for plain SSR (non-PPR) dev mode
+let fallbackTrace: CacheTrace | null = null
+let fallbackPendingRoute: string | null = null
+
+// In-memory fallback store when Vercel Runtime Cache is not available (local dev)
+const localTraceByRouteLatest = new Map<string, StoredTrace>()
+const localTraceById = new Map<string, StoredTrace>()
+const localRecentIds = new Map<string, string[]>()
+
+function getContext(): TraceContext {
+  const ctx = traceStorage.getStore()
+  if (ctx) return ctx
+  // Fallback: use module-level vars (works in plain SSR / dev)
+  return { trace: fallbackTrace, pendingRoute: fallbackPendingRoute }
+}
+
+function setTrace(trace: CacheTrace | null): void {
+  const ctx = traceStorage.getStore()
+  if (ctx) {
+    ctx.trace = trace
+  } else {
+    fallbackTrace = trace
+  }
+}
+
+function setPendingRoute(route: string): void {
+  const ctx = traceStorage.getStore()
+  if (ctx) {
+    ctx.pendingRoute = route
+  } else {
+    fallbackPendingRoute = route
+  }
+}
 
 function generateRequestId(): string {
-  // Use random only - timestamp will be set when first op records
   return `req_${Math.random().toString(36).substring(2, 10)}`
 }
 
@@ -64,38 +118,54 @@ function generateRequestId(): string {
 // ============================================================================
 
 /**
- * Mark the route for tracing
- * The actual trace is initialized lazily when first cache op runs
- * This avoids Date.now() during static render
+ * Mark the route for tracing.
+ * Wrap your page in runWithTraceContext() for proper per-request isolation.
+ * Falls back to module-level state in plain SSR / dev mode.
  */
 export function resetTrace(route: string): void {
-  console.log('[v0] resetTrace called for route:', route)
-  pendingRoute = route
-  currentTrace = null
+  console.log('[CacheTracer] resetTrace:', route)
+  setPendingRoute(route)
+  setTrace(null)
+}
+
+/**
+ * Run an async function with a fresh per-request trace context.
+ * Use this in middleware or a layout to initialize AsyncLocalStorage.
+ * 
+ * @example
+ * // In a server layout or middleware:
+ * export default async function Layout({ children }) {
+ *   return runWithTraceContext('/your-route', async () => {
+ *     return children
+ *   })
+ * }
+ */
+export function runWithTraceContext<T>(route: string, fn: () => T): T {
+  const ctx: TraceContext = { trace: null, pendingRoute: route }
+  return traceStorage.run(ctx, fn)
 }
 
 /**
  * Initialize trace lazily (called from recordCacheOp)
- * Uses the timestamp from the first cache operation
  */
 function ensureTraceInitialized(timestamp: number): CacheTrace {
-  if (!currentTrace) {
-    currentTrace = {
+  const ctx = getContext()
+  if (!ctx.trace) {
+    const newTrace: CacheTrace = {
       requestId: generateRequestId(),
-      route: pendingRoute || '/unknown',
+      route: ctx.pendingRoute || '/unknown',
       startTime: timestamp,
       operations: [],
     }
-    console.log('[v0] Trace initialized:', currentTrace.requestId, 'for route:', currentTrace.route)
+    setTrace(newTrace)
+    console.log('[CacheTracer] Trace initialized:', newTrace.requestId, 'route:', newTrace.route)
+    return newTrace
   }
-  return currentTrace
+  return ctx.trace
 }
 
 /**
- * Record a cache operation (called inside "use cache" functions)
- * Only executes on cache MISS when the function body runs
- * 
- * Lazily initializes the trace using the first operation's timestamp
+ * Record a cache operation (called inside "use cache" functions on cache MISS).
  */
 export function recordCacheOp(
   tag: string,
@@ -103,9 +173,7 @@ export function recordCacheOp(
   opStartTime: number,
   size: number
 ): void {
-  // Lazily initialize trace with first operation's start time
   const trace = ensureTraceInitialized(opStartTime)
-  
   const now = Date.now()
   const operation: CacheOperation = {
     tag,
@@ -115,17 +183,20 @@ export function recordCacheOp(
     duration: now - opStartTime,
     size,
   }
-  
   trace.operations.push(operation)
-  console.log('[v0] recordCacheOp:', tag, 'fetchId:', fetchId, 'duration:', operation.duration, 'ms')
+  console.log('[CacheTracer] recordCacheOp:', tag, 'duration:', operation.duration, 'ms')
 }
 
 /**
- * Get current trace (for passing to components if needed)
+ * Get current trace for the request context.
+ * NOTE: In PPR, this will be null/empty when called from the static shell
+ * because async Suspense children haven't executed yet.
+ * Use StoredTracesViewer (reads from after() → API) for reliable trace data.
  */
 export function getCurrentTrace(): CacheTrace | null {
-  console.log('[v0] getCurrentTrace called, trace:', currentTrace ? `${currentTrace.requestId} with ${currentTrace.operations.length} ops` : 'null')
-  return currentTrace
+  const ctx = getContext()
+  console.log('[CacheTracer] getCurrentTrace:', ctx.trace ? `${ctx.trace.operations.length} ops` : 'null')
+  return ctx.trace
 }
 
 // ============================================================================
@@ -133,28 +204,29 @@ export function getCurrentTrace(): CacheTrace | null {
 // ============================================================================
 
 /**
- * Finalize the trace and store it to Runtime Cache
- * Call this inside after() to persist post-response
+ * Finalize the trace and store it to Runtime Cache (Vercel) or in-memory Map (local).
+ * Call this inside after() to persist post-response.
  */
 export async function finalizeAndStoreTrace(): Promise<StoredTrace | null> {
-  if (!currentTrace) return null
-  
+  const currentTrace = getContext().trace
+  if (!currentTrace) {
+    console.log('[CacheTracer] finalizeAndStoreTrace: no trace to store')
+    return null
+  }
+
   const endTime = Date.now()
   const totalDuration = endTime - currentTrace.startTime
-  
+
   // Calculate summary
   const ops = currentTrace.operations
   const totalFetchTime = ops.reduce((sum, op) => sum + op.duration, 0)
   const totalSize = ops.reduce((sum, op) => sum + op.size, 0)
   const tags = [...new Set(ops.map(op => op.tag))]
-  
+
   // Calculate time saved by parallel execution
-  // If sequential: totalFetchTime, if parallel: max(completedAt)
-  const maxCompletedAt = ops.length > 0 
-    ? Math.max(...ops.map(op => op.completedAt)) 
-    : 0
+  const maxCompletedAt = ops.length > 0 ? Math.max(...ops.map(op => op.completedAt)) : 0
   const parallelSavings = totalFetchTime - maxCompletedAt
-  
+
   const storedTrace: StoredTrace = {
     ...currentTrace,
     endTime,
@@ -167,38 +239,46 @@ export async function finalizeAndStoreTrace(): Promise<StoredTrace | null> {
       parallelSavings: Math.max(0, parallelSavings),
     },
   }
-  
-  // Store to Runtime Cache
-  try {
-    const cache = getCache()
-    
-    // Store the trace with route-based key
-    await cache.set(`trace:${currentTrace.route}:latest`, storedTrace, {
-      ttl: 3600, // 1 hour
-      tags: ['cache-traces', `trace:${currentTrace.route}`],
-    })
-    
-    // Also store by requestId for direct lookup
-    await cache.set(`trace:id:${currentTrace.requestId}`, storedTrace, {
-      ttl: 3600,
-      tags: ['cache-traces'],
-    })
-    
-    // Update list of recent trace IDs for this route
-    const recentKey = `traces:recent:${currentTrace.route}`
-    const existing = await cache.get(recentKey) as string[] | null
-    const recentIds = existing || []
-    recentIds.unshift(currentTrace.requestId)
-    await cache.set(recentKey, recentIds.slice(0, 20), {
-      ttl: 3600,
-      tags: ['cache-traces'],
-    })
-    
-  } catch (error) {
-    // Runtime Cache might not be available in all environments
-    console.error('[CacheTracer] Failed to store trace:', error)
+
+  const routeKey = currentTrace.route
+
+  // Try Vercel Runtime Cache first; fall back to in-memory Map for local dev
+  let usedVercelCache = false
+  if (getCache) {
+    try {
+      const cache = getCache()
+      await cache.set(`trace:${routeKey}:latest`, storedTrace, {
+        ttl: 3600,
+        tags: ['cache-traces', `trace:${routeKey}`],
+      })
+      await cache.set(`trace:id:${currentTrace.requestId}`, storedTrace, {
+        ttl: 3600,
+        tags: ['cache-traces'],
+      })
+      const recentKey = `traces:recent:${routeKey}`
+      const existing = (await cache.get(recentKey)) as string[] | null
+      const recent = existing || []
+      recent.unshift(currentTrace.requestId)
+      await cache.set(recentKey, recent.slice(0, 20), {
+        ttl: 3600,
+        tags: ['cache-traces'],
+      })
+      usedVercelCache = true
+    } catch (error) {
+      console.warn('[CacheTracer] Vercel Runtime Cache unavailable, using in-memory fallback:', String(error))
+    }
   }
-  
+
+  if (!usedVercelCache) {
+    // In-memory fallback (local dev / non-Vercel environments)
+    localTraceByRouteLatest.set(routeKey, storedTrace)
+    localTraceById.set(currentTrace.requestId, storedTrace)
+    const recent = localRecentIds.get(routeKey) || []
+    recent.unshift(currentTrace.requestId)
+    localRecentIds.set(routeKey, recent.slice(0, 20))
+    console.log('[CacheTracer] Stored trace in-memory for route:', routeKey, '| ops:', ops.length)
+  }
+
   return storedTrace
 }
 
@@ -210,37 +290,48 @@ export async function finalizeAndStoreTrace(): Promise<StoredTrace | null> {
  * Get the latest trace for a route
  */
 export async function getLatestTraceForRoute(route: string): Promise<StoredTrace | null> {
-  try {
-    const cache = getCache()
-    return await cache.get(`trace:${route}:latest`) as StoredTrace | null
-  } catch {
-    return null
+  if (getCache) {
+    try {
+      const cache = getCache()
+      const result = await cache.get(`trace:${route}:latest`) as StoredTrace | null
+      if (result) return result
+    } catch {
+      // fall through to local store
+    }
   }
+  return localTraceByRouteLatest.get(route) || null
 }
 
 /**
  * Get a trace by requestId
  */
 export async function getTraceById(requestId: string): Promise<StoredTrace | null> {
-  try {
-    const cache = getCache()
-    return await cache.get(`trace:id:${requestId}`) as StoredTrace | null
-  } catch {
-    return null
+  if (getCache) {
+    try {
+      const cache = getCache()
+      const result = await cache.get(`trace:id:${requestId}`) as StoredTrace | null
+      if (result) return result
+    } catch {
+      // fall through to local store
+    }
   }
+  return localTraceById.get(requestId) || null
 }
 
 /**
  * Get recent trace IDs for a route
  */
 export async function getRecentTraceIds(route: string): Promise<string[]> {
-  try {
-    const cache = getCache()
-    const ids = await cache.get(`traces:recent:${route}`) as string[] | null
-    return ids || []
-  } catch {
-    return []
+  if (getCache) {
+    try {
+      const cache = getCache()
+      const ids = await cache.get(`traces:recent:${route}`) as string[] | null
+      if (ids) return ids
+    } catch {
+      // fall through to local store
+    }
   }
+  return localRecentIds.get(route) || []
 }
 
 // ============================================================================
