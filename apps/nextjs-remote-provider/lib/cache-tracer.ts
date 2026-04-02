@@ -69,6 +69,7 @@ function generateRequestId(): string {
  * This avoids Date.now() during static render
  */
 export function resetTrace(route: string): void {
+  console.log('[v0] resetTrace called for route:', route)
   pendingRoute = route
   currentTrace = null
 }
@@ -85,6 +86,7 @@ function ensureTraceInitialized(timestamp: number): CacheTrace {
       startTime: timestamp,
       operations: [],
     }
+    console.log('[v0] Trace initialized:', currentTrace.requestId, 'for route:', currentTrace.route)
   }
   return currentTrace
 }
@@ -115,12 +117,14 @@ export function recordCacheOp(
   }
   
   trace.operations.push(operation)
+  console.log('[v0] recordCacheOp:', tag, 'fetchId:', fetchId, 'duration:', operation.duration, 'ms')
 }
 
 /**
  * Get current trace (for passing to components if needed)
  */
 export function getCurrentTrace(): CacheTrace | null {
+  console.log('[v0] getCurrentTrace called, trace:', currentTrace ? `${currentTrace.requestId} with ${currentTrace.operations.length} ops` : 'null')
   return currentTrace
 }
 
