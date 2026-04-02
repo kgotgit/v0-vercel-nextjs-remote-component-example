@@ -7,8 +7,7 @@ import { DynamicUserInfo } from './components/dynamic-user-info'
 import { RevalidateButtons } from './components/revalidate-buttons'
 import { CacheStatusSection } from './components/cache-status-section'
 import { CacheInspectorDashboard } from './components/cache-inspector-dashboard'
-import { RequestTraceSection } from './components/request-trace-section'
-import { StoredTracesViewer } from './components/stored-traces-viewer'
+import { TraceSummary } from './components/trace-summary'
 import { resetTrace, finalizeAndStoreTrace } from '@/lib/cache-tracer'
 import {
   ProductListSkeleton,
@@ -143,23 +142,14 @@ export default function CacheDemoPage() {
         </div>
       </section>
 
-      {/* Request Cache Trace - Current request's trace (in-memory) */}
+      {/* Request Cache Trace - Fetched from Runtime Cache via API */}
       <section>
-        <h2 className="font-semibold text-gray-900 mb-2">Current Request Trace</h2>
+        <h2 className="font-semibold text-gray-900 mb-2">Request Cache Trace</h2>
         <p className="text-sm text-gray-500 mb-4">
-          Shows cache operations that ran during THIS request (in-memory, before storage).
+          Shows cache operations from this route stored via <code className="bg-gray-100 px-1 rounded">after()</code> hook 
+          to Vercel Runtime Cache. Client component fetches the stored trace after page loads.
         </p>
-        <RequestTraceSection />
-      </section>
-
-      {/* Stored Trace - Fetched from Runtime Cache via API */}
-      <section>
-        <h2 className="font-semibold text-gray-900 mb-2">Stored Trace (Runtime Cache)</h2>
-        <p className="text-sm text-gray-500 mb-4">
-          The previous request&apos;s trace stored via <code className="bg-gray-100 px-1 rounded">after()</code> hook 
-          to Vercel Runtime Cache. Refresh to see the current request&apos;s trace after it&apos;s stored.
-        </p>
-        <StoredTracesViewer />
+        <TraceSummary />
       </section>
 
       {/* Cache Inspector Dashboard - Shadow Cache Visualization */}
