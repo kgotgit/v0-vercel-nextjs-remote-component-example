@@ -6,6 +6,7 @@ import { DynamicUserInfo } from './components/dynamic-user-info'
 import { RevalidateButtons } from './components/revalidate-buttons'
 import { CacheStatusSection } from './components/cache-status-section'
 import { CacheInspectorDashboard } from './components/cache-inspector-dashboard'
+import { RequestTraceSection } from './components/request-trace-section'
 import {
   ProductListSkeleton,
   ProductStatsSkeleton,
@@ -120,6 +121,11 @@ export default function CacheDemoPage() {
             <CategoryProducts category="home" />
           </Suspense>
         </div>
+      </section>
+
+      {/* Request Cache Trace - Per-request tracing */}
+      <section>
+        <RequestTraceSection />
       </section>
 
       {/* Cache Inspector Dashboard - Shadow Cache Visualization */}
