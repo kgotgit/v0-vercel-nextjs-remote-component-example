@@ -1,16 +1,14 @@
-import { AsyncLocalStorage } from 'async_hooks'
-
 /**
  * Request-Scoped Cache Tracer
  * 
- * Uses AsyncLocalStorage to trace cache operations within a single request.
- * Each request gets its own trace context that collects all cache hits/fetches.
+ * Simple module-level trace that collects cache operations during a request.
+ * Since "use cache" functions only execute on cache MISS, any operation
+ * recorded here represents fresh data being fetched.
  * 
  * Flow:
- * 1. Middleware/layout calls startCacheTrace() at request start
+ * 1. resetCacheTrace() is called at the start of page render
  * 2. Each "use cache" function calls traceCacheOperation() when executing
- * 3. Before response, call getCacheTrace() to get all operations
- * 4. Optionally inject trace into response headers for debugging
+ * 3. getCacheTrace() returns all operations that ran during this render
  */
 
 export type CacheOperation = {
@@ -19,7 +17,7 @@ export type CacheOperation = {
   timestamp: number
   duration: number
   size: number
-  source: 'cache-miss' | 'cache-hit-stale' | 'unknown'
+  source: 'cache-miss'
 }
 
 export type CacheTrace = {
@@ -28,8 +26,9 @@ export type CacheTrace = {
   operations: CacheOperation[]
 }
 
-// AsyncLocalStorage provides request-scoped context
-const cacheTraceStorage = new AsyncLocalStorage<CacheTrace>()
+// Module-level trace storage
+// In serverless, each request gets a fresh module instance
+let currentTrace: CacheTrace | null = null
 
 /**
  * Generate a unique request ID
@@ -39,41 +38,23 @@ function generateRequestId(): string {
 }
 
 /**
- * Start a new cache trace for this request
- * Call this at the beginning of request handling (middleware/layout)
+ * Reset/start a new cache trace for this request
+ * Call this at the beginning of page render
  */
-export function startCacheTrace(): CacheTrace {
-  const trace: CacheTrace = {
+export function resetCacheTrace(): CacheTrace {
+  currentTrace = {
     requestId: generateRequestId(),
     startTime: Date.now(),
     operations: [],
   }
-  return trace
-}
-
-/**
- * Run a function within a cache trace context
- */
-export function runWithCacheTrace<T>(fn: () => T): { result: T; trace: CacheTrace } {
-  const trace = startCacheTrace()
-  const result = cacheTraceStorage.run(trace, fn)
-  return { result, trace }
-}
-
-/**
- * Run an async function within a cache trace context
- */
-export async function runWithCacheTraceAsync<T>(
-  fn: () => Promise<T>
-): Promise<{ result: T; trace: CacheTrace }> {
-  const trace = startCacheTrace()
-  const result = await cacheTraceStorage.run(trace, fn)
-  return { result, trace }
+  console.log('[v0] Cache trace started:', currentTrace.requestId)
+  return currentTrace
 }
 
 /**
  * Record a cache operation in the current trace
  * Call this inside each "use cache" function
+ * Note: This only runs on cache MISS (when the function actually executes)
  */
 export function traceCacheOperation(
   tag: string,
@@ -81,11 +62,9 @@ export function traceCacheOperation(
   startTime: number,
   dataSize: number
 ): void {
-  const trace = cacheTraceStorage.getStore()
-  if (!trace) {
-    // No active trace context - running outside of traced request
-    console.warn(`[CacheTracer] No trace context for tag: ${tag}`)
-    return
+  if (!currentTrace) {
+    // Auto-initialize if not started
+    resetCacheTrace()
   }
 
   const operation: CacheOperation = {
@@ -94,35 +73,25 @@ export function traceCacheOperation(
     timestamp: startTime,
     duration: Date.now() - startTime,
     size: dataSize,
-    // We can't know if it was a hit or miss from inside "use cache"
-    // The function only runs on cache miss
     source: 'cache-miss',
   }
 
-  trace.operations.push(operation)
+  currentTrace!.operations.push(operation)
+  console.log('[v0] Cache operation traced:', tag, fetchId, `${operation.duration}ms`)
 }
 
 /**
  * Get the current cache trace
  */
-export function getCacheTrace(): CacheTrace | undefined {
-  return cacheTraceStorage.getStore()
-}
-
-/**
- * Format trace for logging or headers
- */
-export function formatTraceForHeader(trace: CacheTrace): string {
-  const ops = trace.operations.map(op => 
-    `${op.tag}:${op.fetchId}:${op.duration}ms`
-  ).join(',')
-  return `${trace.requestId};ops=${ops};total=${trace.operations.length}`
+export function getCacheTrace(): CacheTrace | null {
+  return currentTrace
 }
 
 /**
  * Format trace as JSON for debugging
  */
-export function formatTraceAsJson(trace: CacheTrace): object {
+export function formatTraceAsJson(trace: CacheTrace | null): object | null {
+  if (!trace) return null
   return {
     requestId: trace.requestId,
     totalDuration: Date.now() - trace.startTime,

@@ -7,6 +7,7 @@ import { RevalidateButtons } from './components/revalidate-buttons'
 import { CacheStatusSection } from './components/cache-status-section'
 import { CacheInspectorDashboard } from './components/cache-inspector-dashboard'
 import { RequestTraceSection } from './components/request-trace-section'
+import { resetCacheTrace } from '@/lib/cache-tracer'
 import {
   ProductListSkeleton,
   ProductStatsSkeleton,
@@ -35,6 +36,10 @@ import {
  * - Tags assigned via cacheTag() in cached functions
  */
 export default function CacheDemoPage() {
+  // Reset the cache trace at the start of each request
+  // This ensures we capture all cache operations during this render
+  resetCacheTrace()
+  
   return (
     <div className="space-y-8">
       {/* Explanation Section */}
