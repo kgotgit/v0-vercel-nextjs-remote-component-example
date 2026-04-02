@@ -14,7 +14,6 @@
  */
 
 import { getCache } from '@vercel/functions'
-import { headers } from 'next/headers'
 
 // ============================================================================
 // Types
@@ -53,9 +52,11 @@ export type StoredTrace = CacheTrace & {
 // ============================================================================
 
 let currentTrace: CacheTrace | null = null
+let pendingRoute: string | null = null
 
 function generateRequestId(): string {
-  return `req_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`
+  // Use random only - timestamp will be set when first op records
+  return `req_${Math.random().toString(36).substring(2, 10)}`
 }
 
 // ============================================================================
@@ -63,21 +64,27 @@ function generateRequestId(): string {
 // ============================================================================
 
 /**
- * Initialize a new trace for this request
- * Call at the start of page render
- * 
- * Uses headers() to opt into dynamic rendering, which allows Date.now()
+ * Mark the route for tracing
+ * The actual trace is initialized lazily when first cache op runs
+ * This avoids Date.now() during static render
  */
-export async function resetTrace(route: string): Promise<CacheTrace> {
-  // Access headers to opt into dynamic rendering
-  // This allows us to use Date.now() without build errors
-  await headers()
-  
-  currentTrace = {
-    requestId: generateRequestId(),
-    route,
-    startTime: Date.now(),
-    operations: [],
+export function resetTrace(route: string): void {
+  pendingRoute = route
+  currentTrace = null
+}
+
+/**
+ * Initialize trace lazily (called from recordCacheOp)
+ * Uses the timestamp from the first cache operation
+ */
+function ensureTraceInitialized(timestamp: number): CacheTrace {
+  if (!currentTrace) {
+    currentTrace = {
+      requestId: generateRequestId(),
+      route: pendingRoute || '/unknown',
+      startTime: timestamp,
+      operations: [],
+    }
   }
   return currentTrace
 }
@@ -85,6 +92,8 @@ export async function resetTrace(route: string): Promise<CacheTrace> {
 /**
  * Record a cache operation (called inside "use cache" functions)
  * Only executes on cache MISS when the function body runs
+ * 
+ * Lazily initializes the trace using the first operation's timestamp
  */
 export function recordCacheOp(
   tag: string,
@@ -92,22 +101,20 @@ export function recordCacheOp(
   opStartTime: number,
   size: number
 ): void {
-  if (!currentTrace) {
-    // Auto-initialize if not started (shouldn't happen in normal flow)
-    resetTrace('/unknown')
-  }
+  // Lazily initialize trace with first operation's start time
+  const trace = ensureTraceInitialized(opStartTime)
   
   const now = Date.now()
   const operation: CacheOperation = {
     tag,
     fetchId,
-    startedAt: opStartTime - currentTrace!.startTime,
-    completedAt: now - currentTrace!.startTime,
+    startedAt: opStartTime - trace.startTime,
+    completedAt: now - trace.startTime,
     duration: now - opStartTime,
     size,
   }
   
-  currentTrace!.operations.push(operation)
+  trace.operations.push(operation)
 }
 
 /**
