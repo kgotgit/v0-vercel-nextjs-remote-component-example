@@ -16,12 +16,16 @@ type StoredTrace = {
   route: string
   deploymentId: string
   startTime: number
+  endTime: number
   totalDuration: number
+  allCached: boolean
   operations: TraceOperation[]
   summary: {
     totalOps: number
     totalFetchTime: number
-    parallelEfficiency: number
+    totalSize: number
+    tags: string[]
+    parallelSavings: number
   }
 }
 
@@ -155,9 +159,9 @@ export function StoredTracesViewer() {
             </span>
           </div>
           <div>
-            <span className="text-slate-500">Parallel Efficiency:</span>
+            <span className="text-slate-500">Parallel Savings:</span>
             <span className="text-emerald-400 ml-2">
-              {trace.summary.parallelEfficiency.toFixed(0)}%
+              {formatTime(trace.summary.parallelSavings)}
             </span>
           </div>
         </div>
@@ -229,7 +233,7 @@ export function StoredTracesViewer() {
               </div>
             </div>
             <p className="text-center text-xs text-slate-500 mt-3">
-              Parallel execution saved {formatTime(trace.summary.totalFetchTime - trace.totalDuration)} vs sequential
+              Parallel execution saved {formatTime(trace.summary.parallelSavings)} vs sequential
             </p>
           </div>
         </div>

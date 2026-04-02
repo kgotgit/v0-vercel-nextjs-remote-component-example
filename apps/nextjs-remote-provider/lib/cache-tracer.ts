@@ -348,29 +348,36 @@ export function formatDuration(ms: number): string {
 }
 
 /**
- * Format trace for JSON response
+ * Format trace for JSON API response.
+ * Returns raw numbers so the client can format them itself.
+ * Pre-formatted strings (e.g. "2.00s") cannot be consumed by client-side
+ * formatTime() / formatBytes() functions.
  */
 export function formatTraceForApi(trace: StoredTrace | null) {
   if (!trace) return null
-  
+
   return {
     requestId: trace.requestId,
     route: trace.route,
     deploymentId: trace.deploymentId,
-    totalDuration: formatDuration(trace.totalDuration),
+    startTime: trace.startTime,
+    endTime: trace.endTime,
+    totalDuration: trace.totalDuration,
     allCached: trace.operations.length === 0,
     operations: trace.operations.map(op => ({
       tag: op.tag,
       fetchId: op.fetchId,
-      timeline: `${op.startedAt}ms → ${op.completedAt}ms`,
-      duration: formatDuration(op.duration),
-      size: formatBytes(op.size),
+      startedAt: op.startedAt,
+      completedAt: op.completedAt,
+      duration: op.duration,
+      size: op.size,
     })),
     summary: {
-      ...trace.summary,
-      totalFetchTime: formatDuration(trace.summary.totalFetchTime),
-      totalSize: formatBytes(trace.summary.totalSize),
-      parallelSavings: formatDuration(trace.summary.parallelSavings),
+      totalOps: trace.summary.totalOps,
+      totalFetchTime: trace.summary.totalFetchTime,
+      totalSize: trace.summary.totalSize,
+      tags: trace.summary.tags,
+      parallelSavings: trace.summary.parallelSavings,
     },
   }
 }
