@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { after } from 'next/server'
+import { after, connection } from 'next/server'
 import { ProductList } from './components/product-list'
 import { ProductStats } from './components/product-stats'
 import { CategoryProducts } from './components/category-products'
@@ -16,6 +16,42 @@ import {
   DynamicUserSkeleton,
   CategoryProductsSkeleton,
 } from './components/loading-skeleton'
+
+/**
+ * TraceSetup — async server component that initialises per-request tracing.
+ *
+ * WHY this must be async and inside <Suspense>:
+ * With cacheComponents: true (PPR), the synchronous page shell is executed
+ * ONCE at build time to produce static HTML. `resetTrace()` and `after()` called
+ * in the sync shell only fire during the static prerender — never at request time.
+ *
+ * Async components inside <Suspense> are "dynamic slots" — they run on every
+ * real request. Calling `connection()` here explicitly signals to Next.js that
+ * this component requires a live request context, ensuring it always streams.
+ *
+ * Ordering guarantee:
+ * React starts all Suspense boundaries concurrently. TraceSetup resolves in
+ * microseconds (just resets module-level state). The data-loading siblings
+ * (ProductList ~1500 ms, etc.) start at the same time but finish much later.
+ * So `resetTrace()` always runs before `recordCacheOp()` is called inside
+ * the "use cache" functions.
+ */
+async function TraceSetup({ route }: { route: string }) {
+  // Opt into dynamic (request-time) rendering — required so PPR does not
+  // pre-bake this component at build time.
+  await connection()
+  resetTrace(route)
+  after(async () => {
+    const storedTrace = await finalizeAndStoreTrace()
+    if (storedTrace) {
+      console.log(
+        `[CacheTracer] Route: ${storedTrace.route} | deploymentId: ${storedTrace.deploymentId} | ` +
+        `${storedTrace.summary.totalOps} cache ops | ${storedTrace.totalDuration}ms total`
+      )
+    }
+  })
+  return null
+}
 
 /**
  * Cache Demo Page - Demonstrating PPR and Cache Components
@@ -38,25 +74,17 @@ import {
  * - Tags assigned via cacheTag() in cached functions
  */
 export default function CacheDemoPage() {
-  // Mark the route for tracing - actual trace is initialized lazily
-  // when first cache operation runs (to avoid Date.now() during static render)
-  resetTrace('/cache-demo')
-  
-  // Schedule trace storage to run after response is sent
-  // This runs after all Suspense boundaries have resolved
-  after(async () => {
-    const storedTrace = await finalizeAndStoreTrace()
-    if (storedTrace) {
-      console.log(
-        `[CacheTracer] Route: ${storedTrace.route} | ` +
-        `${storedTrace.summary.totalOps} cache ops | ` +
-        `${storedTrace.totalDuration}ms total`
-      )
-    }
-  })
-  
   return (
     <div className="space-y-8">
+      {/*
+        TraceSetup runs per-request (async + connection()) and must be the
+        FIRST Suspense boundary so resetTrace() fires before any sibling
+        "use cache" functions can call recordCacheOp().
+      */}
+      <Suspense fallback={null}>
+        <TraceSetup route="/cache-demo" />
+      </Suspense>
+
       {/* Explanation Section */}
       <section className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-xl p-6 text-white">
         <h2 className="text-lg font-semibold mb-3">How This Demo Works</h2>
