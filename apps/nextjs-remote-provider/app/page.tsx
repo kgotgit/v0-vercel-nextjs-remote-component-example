@@ -14,6 +14,22 @@ export default function HomePage() {
         <h1 className="text-2xl font-bold text-gray-900 mb-2">{PROVIDER_APP_META.title}</h1>
         <p className="text-gray-600 mb-8">{PROVIDER_APP_META.description}</p>
 
+        {/* Cache Components Demo Link */}
+        <Link
+          href="/cache-demo"
+          className="block mb-8 p-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="font-semibold">Cache Components Demo</span>
+              <p className="text-sm text-blue-100 mt-1">
+                PPR + Cache Components + Tag-based Invalidation
+              </p>
+            </div>
+            <span className="text-2xl">-&gt;</span>
+          </div>
+        </Link>
+
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
             <h2 className="font-semibold text-gray-900">{PROVIDER_COPY.componentsHeading}</h2>
