@@ -85,7 +85,7 @@ function ProductsHostShell() {
           </div>
 
           <div className="border border-dashed border-gray-300 rounded-lg p-4 min-h-[280px]">
-            <RemoteComponent key={`${remoteSrc}::${refreshKey}`} src={remoteSrc} />
+            <RemoteComponent src={remoteSrc} />
           </div>
         </div>
       </main>
