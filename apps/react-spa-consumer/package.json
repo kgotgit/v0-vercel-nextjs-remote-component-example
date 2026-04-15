@@ -14,7 +14,7 @@
     "@repo/ui": "workspace:*",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "remote-components": "^0.1.2"
+    "remote-components": "^0.3.5"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",

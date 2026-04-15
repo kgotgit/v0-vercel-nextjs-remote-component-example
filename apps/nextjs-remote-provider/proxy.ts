@@ -1,6 +1,6 @@
-import { withRemoteComponents } from "remote-components/next/proxy";
+import { withExposeRemoteComponents } from "remote-components/remote/middleware";
 
-export const proxy = withRemoteComponents(undefined, {
+export const proxy = withExposeRemoteComponents(undefined, {
   cors: {
     origin: "*",
     method: ["GET", "POST", "OPTIONS"],
@@ -12,4 +12,3 @@ export const proxy = withRemoteComponents(undefined, {
 export const config = {
   matcher: ["/remote-components/:path*", "/_next/static/:path*"],
 };
-
