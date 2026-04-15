@@ -86,7 +86,7 @@ function ProductsHostShell() {
           </div>
 
           <div className="border border-dashed border-gray-300 rounded-lg p-4 min-h-[280px]">
-            <ConsumeRemoteComponent isolate mode="closed" key={`${refreshKey}`} src={remoteSrc} />
+            <ConsumeRemoteComponent isolate mode="closed" key={refreshKey} src={remoteSrc} />
           </div>
         </div>
       </main>

@@ -6,6 +6,7 @@ type Modality = "all" | "ct" | "mri" | "xray";
 
 const MODALITIES: Modality[] = ["all", "ct", "mri", "xray"];
 
+// Host uses capture + stopPropagation when it sees this link; this path is for closed shadow / retargeted clicks.
 function emitRemoteNavigate(event: MouseEvent<HTMLAnchorElement>) {
   const remotePath = event.currentTarget.getAttribute("data-remote-path");
   if (!remotePath) return;

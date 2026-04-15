@@ -58,7 +58,11 @@ export function RemoteComponentProvider({ children }: { children: ReactNode }) {
       setRemotePath(getUrlPathWithSearch());
     };
 
-    // Open shadow DOM / regular DOM: composedPath lets us see the <a> directly.
+    // Open shadow DOM / regular DOM: composedPath (or closest) exposes the <a>.
+    // Stop propagation after handling so the event never reaches the anchor's
+    // onClick — remote links that also dispatch `remote-navigate` would otherwise
+    // trigger navigateRemote twice. Closed shadow: we usually do not resolve the
+    // anchor here, so we do not stop; the remote dispatches `remote-navigate` instead.
     const onDocumentClick = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -83,11 +87,11 @@ export function RemoteComponentProvider({ children }: { children: ReactNode }) {
 
       event.preventDefault();
       navigateRemote(remotePath);
+      event.stopPropagation();
     };
 
-    // Closed shadow DOM: the remote's RemoteNavigationBridge intercepts the
-    // click inside the shadow root and dispatches a composed CustomEvent that
-    // crosses the shadow boundary. Works in all browsers.
+    // Closed shadow DOM: capture-phase path often cannot see the real <a>. Remotes
+    // may dispatch this composed custom event from an explicit click handler instead.
     const onRemoteNavigate = (event: Event) => {
       const detail = (event as CustomEvent).detail;
       if (detail?.path) {
