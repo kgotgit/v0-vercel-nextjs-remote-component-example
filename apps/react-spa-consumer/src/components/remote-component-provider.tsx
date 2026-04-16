@@ -58,18 +58,14 @@ export function RemoteComponentProvider({ children }: { children: ReactNode }) {
       setRemotePath(getUrlPathWithSearch());
     };
 
+    // Open shadow DOM / regular DOM: composedPath (or closest) exposes the <a>.
+    // Stop propagation after handling so the event never reaches the anchor's
+    // onClick — remote links that also dispatch `remote-navigate` would otherwise
+    // trigger navigateRemote twice. Closed shadow: we usually do not resolve the
+    // anchor here, so we do not stop; the remote dispatches `remote-navigate` instead.
     const onDocumentClick = (event: MouseEvent) => {
-      if (event.defaultPrevented) {
-        return;
-      }
-
-      if (event.button !== 0) {
-        return;
-      }
-
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-        return;
-      }
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
       const path = typeof event.composedPath === "function" ? event.composedPath() : [];
       const anchorFromPath = path.find(
@@ -83,29 +79,34 @@ export function RemoteComponentProvider({ children }: { children: ReactNode }) {
           : null;
 
       const anchor = anchorFromPath ?? anchorFromTarget;
-      if (!anchor) {
-        return;
-      }
-
-      if (anchor.target && anchor.target !== "_self") {
-        return;
-      }
+      if (!anchor) return;
+      if (anchor.target && anchor.target !== "_self") return;
 
       const remotePath = anchor.getAttribute("data-remote-path");
-      if (!remotePath) {
-        return;
-      }
+      if (!remotePath) return;
 
       event.preventDefault();
       navigateRemote(remotePath);
+      event.stopPropagation();
+    };
+
+    // Closed shadow DOM: capture-phase path often cannot see the real <a>. Remotes
+    // may dispatch this composed custom event from an explicit click handler instead.
+    const onRemoteNavigate = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail?.path) {
+        navigateRemote(detail.path);
+      }
     };
 
     window.addEventListener("popstate", onPopState);
     document.addEventListener("click", onDocumentClick, true);
+    document.addEventListener("remote-navigate", onRemoteNavigate);
 
     return () => {
       window.removeEventListener("popstate", onPopState);
       document.removeEventListener("click", onDocumentClick, true);
+      document.removeEventListener("remote-navigate", onRemoteNavigate);
     };
   }, [navigateRemote]);
 

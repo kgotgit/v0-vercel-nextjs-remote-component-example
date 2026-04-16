@@ -1,7 +1,6 @@
-import type { NextConfig } from "next";
-import { withRemoteComponents } from 'remote-components/next/config';
+import { withRemoteComponentsConfig } from 'remote-components/config/nextjs';
 
-const nextConfig: NextConfig = withRemoteComponents({
+const nextConfig = withRemoteComponentsConfig({
   // Enable Cache Components (includes PPR - Partial Prerendering)
   // The "use cache" directive and PPR are both enabled via this single flag
   cacheComponents: true,

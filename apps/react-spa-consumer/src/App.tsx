@@ -1,8 +1,8 @@
 import { useMemo } from "react";
-import { RemoteComponent } from "remote-components/react";
-import { getRemoteProviderUrl } from "@repo/config";
+import { ConsumeRemoteComponent } from "remote-components/host/react";
 import { APP_COPY } from "@repo/ui";
 import { RemoteComponentProvider, useRemoteComponent } from "./components/remote-component-provider";
+import { getRemoteProviderUrl } from "@repo/config";
 
 const REMOTE_PROVIDER_URL = getRemoteProviderUrl(import.meta.env.VITE_REMOTE_PROVIDER_URL);
 
@@ -14,6 +14,7 @@ function normalizeRemotePath(path: string) {
   }
   return normalized;
 }
+
 
 function ProductsHostShell() {
   const { remotePath, navigateRemote, refresh, isLoading, refreshKey } = useRemoteComponent();
@@ -85,7 +86,7 @@ function ProductsHostShell() {
           </div>
 
           <div className="border border-dashed border-gray-300 rounded-lg p-4 min-h-[280px]">
-            <RemoteComponent key={`${remoteSrc}::${refreshKey}`} src={remoteSrc} />
+            <ConsumeRemoteComponent isolate mode="closed" key={refreshKey} src={remoteSrc} />
           </div>
         </div>
       </main>

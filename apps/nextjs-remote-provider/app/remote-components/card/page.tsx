@@ -1,9 +1,9 @@
 import React from "react";
-import { RemoteComponent } from "remote-components/next";
+import { ExposeRemoteComponent } from "remote-components/remote/nextjs/app";
 
 export default function CardComponent() {
   return (
-    <RemoteComponent>
+    <ExposeRemoteComponent>
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <div className="h-32 bg-gradient-to-br from-emerald-400 to-cyan-500" />
       <div className="p-5">
@@ -28,6 +28,6 @@ export default function CardComponent() {
         </div>
       </div>
     </div>
-    </RemoteComponent>
+    </ExposeRemoteComponent>
   );
 }

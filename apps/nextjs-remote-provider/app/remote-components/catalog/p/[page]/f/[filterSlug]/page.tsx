@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { RemoteComponent } from "remote-components/next";
+import { ExposeRemoteComponent } from "remote-components/remote/nextjs/app";
 import { CatalogServer } from "./catalog.server";
 
 // With cacheComponents enabled, all uncached async data access must be inside Suspense.
@@ -17,9 +17,9 @@ async function CatalogContent({ params }: { params: Promise<CatalogPageParams> }
   const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
 
   return (
-    <RemoteComponent>
+    <ExposeRemoteComponent>
       <CatalogServer page={page} filterSlug={resolvedParams.filterSlug} />
-    </RemoteComponent>
+    </ExposeRemoteComponent>
   );
 }
 
