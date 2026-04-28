@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useRemoteNavigate } from "remote-components/host/react";
 
 type RemoteComponentContextValue = {
   remotePath: string;
@@ -52,63 +53,23 @@ export function RemoteComponentProvider({ children }: { children: ReactNode }) {
     setRemotePath(normalized);
   }, []);
 
+  useRemoteNavigate(() => {
+    setIsLoading(true);
+    setRemotePath(getUrlPathWithSearch());
+  });
+
   useEffect(() => {
     const onPopState = () => {
       setIsLoading(true);
       setRemotePath(getUrlPathWithSearch());
     };
 
-    // Open shadow DOM / regular DOM: composedPath (or closest) exposes the <a>.
-    // Stop propagation after handling so the event never reaches the anchor's
-    // onClick — remote links that also dispatch `remote-navigate` would otherwise
-    // trigger navigateRemote twice. Closed shadow: we usually do not resolve the
-    // anchor here, so we do not stop; the remote dispatches `remote-navigate` instead.
-    const onDocumentClick = (event: MouseEvent) => {
-      if (event.defaultPrevented || event.button !== 0) return;
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-
-      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
-      const anchorFromPath = path.find(
-        (node) => node instanceof HTMLAnchorElement && node.hasAttribute("data-remote-path")
-      ) as HTMLAnchorElement | undefined;
-
-      const target = event.target;
-      const anchorFromTarget =
-        target instanceof Element
-          ? (target.closest("a[data-remote-path]") as HTMLAnchorElement | null)
-          : null;
-
-      const anchor = anchorFromPath ?? anchorFromTarget;
-      if (!anchor) return;
-      if (anchor.target && anchor.target !== "_self") return;
-
-      const remotePath = anchor.getAttribute("data-remote-path");
-      if (!remotePath) return;
-
-      event.preventDefault();
-      navigateRemote(remotePath);
-      event.stopPropagation();
-    };
-
-    // Closed shadow DOM: capture-phase path often cannot see the real <a>. Remotes
-    // may dispatch this composed custom event from an explicit click handler instead.
-    const onRemoteNavigate = (event: Event) => {
-      const detail = (event as CustomEvent).detail;
-      if (detail?.path) {
-        navigateRemote(detail.path);
-      }
-    };
-
     window.addEventListener("popstate", onPopState);
-    document.addEventListener("click", onDocumentClick, true);
-    document.addEventListener("remote-navigate", onRemoteNavigate);
 
     return () => {
       window.removeEventListener("popstate", onPopState);
-      document.removeEventListener("click", onDocumentClick, true);
-      document.removeEventListener("remote-navigate", onRemoteNavigate);
     };
-  }, [navigateRemote]);
+  }, []);
 
   useEffect(() => {
     if (!isLoading) {

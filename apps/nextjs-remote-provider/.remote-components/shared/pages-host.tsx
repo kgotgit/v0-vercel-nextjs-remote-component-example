@@ -6,6 +6,6 @@ export const shared = { ['react']: () => import('react'),
 ['react-dom/client']: () => import('react-dom/client'),
 ['next/router']: () => import('next/router'),
 ['next/link']: () => import('next/link'),
-['next/image']: () => import('next/image'),
+['next/dist/shared/lib/image-loader']: () => import('next/dist/shared/lib/image-loader'),
 ['next/script']: () => import('next/script'),
 ['next/form']: () => import('next/form'),};
