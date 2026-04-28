@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useRemoteNavigate } from "remote-components/host/react";
 
 type RemoteComponentContextValue = {
   remotePath: string;
@@ -52,62 +53,23 @@ export function RemoteComponentProvider({ children }: { children: ReactNode }) {
     setRemotePath(normalized);
   }, []);
 
+  useRemoteNavigate(() => {
+    setIsLoading(true);
+    setRemotePath(getUrlPathWithSearch());
+  });
+
   useEffect(() => {
     const onPopState = () => {
       setIsLoading(true);
       setRemotePath(getUrlPathWithSearch());
     };
 
-    const onDocumentClick = (event: MouseEvent) => {
-      if (event.defaultPrevented) {
-        return;
-      }
-
-      if (event.button !== 0) {
-        return;
-      }
-
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-        return;
-      }
-
-      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
-      const anchorFromPath = path.find(
-        (node) => node instanceof HTMLAnchorElement && node.hasAttribute("data-remote-path")
-      ) as HTMLAnchorElement | undefined;
-
-      const target = event.target;
-      const anchorFromTarget =
-        target instanceof Element
-          ? (target.closest("a[data-remote-path]") as HTMLAnchorElement | null)
-          : null;
-
-      const anchor = anchorFromPath ?? anchorFromTarget;
-      if (!anchor) {
-        return;
-      }
-
-      if (anchor.target && anchor.target !== "_self") {
-        return;
-      }
-
-      const remotePath = anchor.getAttribute("data-remote-path");
-      if (!remotePath) {
-        return;
-      }
-
-      event.preventDefault();
-      navigateRemote(remotePath);
-    };
-
     window.addEventListener("popstate", onPopState);
-    document.addEventListener("click", onDocumentClick, true);
 
     return () => {
       window.removeEventListener("popstate", onPopState);
-      document.removeEventListener("click", onDocumentClick, true);
     };
-  }, [navigateRemote]);
+  }, []);
 
   useEffect(() => {
     if (!isLoading) {

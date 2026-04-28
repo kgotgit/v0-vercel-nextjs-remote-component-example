@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { RemoteComponent } from "remote-components/next";
+import { ExposeRemoteComponent } from "remote-components/remote/nextjs/app";
 import { ProductsServer } from "./products.server";
 
 type PageProps = {
@@ -21,9 +21,9 @@ async function ProductsRouteContent({ params }: PageProps) {
 export default function ProductsPage({ params }: PageProps) {
   return (
     <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading products...</div>}>
-      <RemoteComponent>
+      <ExposeRemoteComponent>
         <ProductsRouteContent params={params} />
-      </RemoteComponent>
+      </ExposeRemoteComponent>
     </Suspense>
   );
 }

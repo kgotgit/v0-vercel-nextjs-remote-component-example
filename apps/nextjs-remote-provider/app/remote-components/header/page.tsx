@@ -1,10 +1,10 @@
-import { RemoteComponent } from "remote-components/next";
+import { ExposeRemoteComponent } from "remote-components/remote/nextjs/app";
 import { HeaderServer } from "./header.server";
 
 export default function HeaderComponent() {
   return (
-    <RemoteComponent>
+    <ExposeRemoteComponent>
       <HeaderServer />
-    </RemoteComponent>
+    </ExposeRemoteComponent>
   );
 }
