@@ -153,8 +153,8 @@ importers:
         specifier: ^2.15.0
         version: 2.15.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       remote-components:
-        specifier: ^0.3.5
-        version: 0.3.5(next@16.2.1(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        specifier: 0.4.0
+        version: 0.4.0(next@16.2.1(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -211,8 +211,8 @@ importers:
         specifier: ^19.2.3
         version: 19.2.4(react@19.2.4)
       remote-components:
-        specifier: ^0.3.5
-        version: 0.3.5(next@16.2.1(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        specifier: 0.4.0
+        version: 0.4.0(next@16.2.1(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
     devDependencies:
       '@types/react':
         specifier: ^19.2.0
@@ -2601,8 +2601,8 @@ packages:
       react: ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  remote-components@0.3.5:
-    resolution: {integrity: sha512-7vT2+cLPyLGWPkeclnfQj9vntZXti+Zh6tIBwCC6rYYMUhUZpQnB8LeHa5W6jf0eCBVbax3sENQwcfadrrI6PA==}
+  remote-components@0.4.0:
+    resolution: {integrity: sha512-onfal3FGFPu7hRm/GFUUdhoG9RF3tFhmHkI9NYJMk9hyh11rEEIWBFy9V0QoWeHJ0i/vfYzDDDLus6jSshajOg==}
     peerDependencies:
       next: '>=15'
       react: ^19.2.3
@@ -5018,7 +5018,7 @@ snapshots:
       tiny-invariant: 1.3.3
       victory-vendor: 36.9.2
 
-  remote-components@0.3.5(next@16.2.1(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
+  remote-components@0.4.0(next@16.2.1(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
     dependencies:
       enhanced-resolve: 5.20.1
       find-up: 7.0.0
